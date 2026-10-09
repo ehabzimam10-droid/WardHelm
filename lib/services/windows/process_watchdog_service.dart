@@ -55,21 +55,45 @@ class ProcessWatchdogService {
 
       final output = result.stdout as String;
       final lines = output.split('\r\n');
+      final Set<String> killedThisCycle = {};
 
       for (final line in lines) {
         if (line.trim().isEmpty) continue;
-        final match = RegExp(r'^"([^"]+)"').firstMatch(line);
-        if (match == null) continue;
+        
+        final fields = RegExp(r'"([^"]*)"')
+            .allMatches(line)
+            .map((m) => m.group(1) ?? '')
+            .toList();
 
-        final rawExe = match.group(1)?.toLowerCase() ?? '';
+        if (fields.isEmpty) continue;
+
+        final rawExe = fields[0].toLowerCase().trim();
         if (rawExe.isEmpty) continue;
 
+        // Skip Windows system services (Session 0 / Services)
+        if (fields.length >= 4) {
+          final sessionName = fields[2].toLowerCase();
+          final sessionNum = fields[3];
+          if (sessionName == 'services' || sessionNum == '0') {
+            continue;
+          }
+        }
+
+        // Never terminate protected system or WardHelm processes
         if (AppConstants.protectedSystemProcesses.contains(rawExe)) continue;
 
-        final isWhitelisted = _allowedApps.any((app) =>
-            rawExe == app || rawExe.startsWith(app.replaceAll('.exe', '')));
+        // Check if application is in the allowed whitelist
+        final isWhitelisted = _allowedApps.any((app) {
+          final normalizedApp = app.toLowerCase().trim();
+          final baseName = normalizedApp.replaceAll('.exe', '');
+          return rawExe == normalizedApp ||
+              rawExe == '$baseName.exe' ||
+              rawExe.startsWith(baseName);
+        });
 
-        if (!isWhitelisted) {
+        // Kill unauthorized application once per scan cycle
+        if (!isWhitelisted && !killedThisCycle.contains(rawExe)) {
+          killedThisCycle.add(rawExe);
           await _killProcess(rawExe);
         }
       }

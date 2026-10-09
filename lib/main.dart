@@ -71,6 +71,10 @@ class _WardHelmAppState extends State<WardHelmApp> {
 
     _isAuthenticated = await _authService.isAuthenticated();
 
+    _appState.onLockDashboard = () {
+      setState(() => _isAuthenticated = false);
+    };
+
     _appState.addListener(() => setState(() {}));
     _deviceState.addListener(() => setState(() {}));
     _sessionState.addListener(() => setState(() {}));
@@ -119,7 +123,15 @@ class _WardHelmAppState extends State<WardHelmApp> {
   }
 
   Widget _buildMainView() {
-    // If not authenticated, show AuthScreen
+    // If viewing the Windows Agent Kiosk, render directly without requiring owner PIN
+    if (_appState.currentView == AppView.agentKiosk) {
+      return AgentKioskScreen(
+        agentController: _agentController,
+        appState: _appState,
+      );
+    }
+
+    // For Controller Dashboard / Settings / Details, require Owner Authentication
     if (!_isAuthenticated) {
       return AuthScreen(
         onAuthenticated: () => setState(() => _isAuthenticated = true),

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -7,8 +8,11 @@ enum AppView { dashboard, deviceDetail, agentKiosk, settings }
 class AppState extends ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.dark;
   bool _isArabic = true;
-  AppView _currentView = AppView.dashboard;
+  AppView _currentView = (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows)
+      ? AppView.agentKiosk
+      : AppView.dashboard;
   String? _selectedDeviceId;
+  VoidCallback? onLockDashboard;
 
   ThemeMode get themeMode => _themeMode;
   bool get isArabic => _isArabic;
@@ -21,6 +25,13 @@ class AppState extends ChangeNotifier {
     final isDark = prefs.getBool('wardhelm_dark_mode') ?? true;
     _themeMode = isDark ? ThemeMode.dark : ThemeMode.light;
     _isArabic = prefs.getBool('wardhelm_arabic') ?? true;
+
+    // Set initial view based on platform
+    if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows) {
+      _currentView = AppView.agentKiosk;
+    } else {
+      _currentView = AppView.dashboard;
+    }
     notifyListeners();
   }
 
@@ -43,6 +54,11 @@ class AppState extends ChangeNotifier {
     if (deviceId != null) {
       _selectedDeviceId = deviceId;
     }
+    notifyListeners();
+  }
+
+  void lockDashboard() {
+    onLockDashboard?.call();
     notifyListeners();
   }
 }

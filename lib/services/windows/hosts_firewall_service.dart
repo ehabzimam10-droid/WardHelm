@@ -59,19 +59,32 @@ class HostsFirewallService {
     return content;
   }
 
-  /// Engages Windows Firewall block rule to cut general outbound internet
+  /// Engages Windows Firewall block rules to cut general outbound game (UDP) and web (TCP) traffic
   Future<bool> blockInternet() async {
     if (!NativeIo.isWindows) return true;
 
     try {
       await restoreInternet();
 
+      // Block all outbound UDP (disconnects online game servers including Roblox, Minecraft, Steam)
       await NativeIo.runProcess('netsh', [
         'advfirewall',
         'firewall',
         'add',
         'rule',
-        'name=${AppConstants.firewallRuleName}',
+        'name=${AppConstants.firewallUdpRuleName}',
+        'dir=out',
+        'action=block',
+        'protocol=UDP',
+      ], runInShell: true);
+
+      // Block non-secure web traffic (ports 80, 8080)
+      await NativeIo.runProcess('netsh', [
+        'advfirewall',
+        'firewall',
+        'add',
+        'rule',
+        'name=${AppConstants.firewallTcpRuleName}',
         'dir=out',
         'action=block',
         'protocol=TCP',
@@ -84,11 +97,30 @@ class HostsFirewallService {
     }
   }
 
-  /// Removes firewall block rule, restoring internet to normal
+  /// Removes firewall block rules, restoring internet to normal
   Future<bool> restoreInternet() async {
     if (!NativeIo.isWindows) return true;
 
     try {
+      // Delete UDP killswitch rule
+      await NativeIo.runProcess('netsh', [
+        'advfirewall',
+        'firewall',
+        'delete',
+        'rule',
+        'name=${AppConstants.firewallUdpRuleName}',
+      ], runInShell: true);
+
+      // Delete TCP killswitch rule
+      await NativeIo.runProcess('netsh', [
+        'advfirewall',
+        'firewall',
+        'delete',
+        'rule',
+        'name=${AppConstants.firewallTcpRuleName}',
+      ], runInShell: true);
+
+      // Delete legacy rule name if present
       await NativeIo.runProcess('netsh', [
         'advfirewall',
         'firewall',
@@ -96,6 +128,7 @@ class HostsFirewallService {
         'rule',
         'name=${AppConstants.firewallRuleName}',
       ], runInShell: true);
+
       return true;
     } catch (_) {
       return false;

@@ -194,7 +194,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     OutlinedButton.icon(
                       onPressed: () async {
                         await _auth.logout();
-                        widget.appState.navigateTo(AppView.dashboard);
+                        widget.appState.lockDashboard();
                       },
                       icon: const Icon(Icons.lock_outline_rounded, color: AppColors.danger, size: 18),
                       label: const Text('قفل لوحة التحكم', style: TextStyle(color: AppColors.danger)),

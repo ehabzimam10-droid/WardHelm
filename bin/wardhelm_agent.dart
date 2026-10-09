@@ -41,6 +41,8 @@ void main(List<String> args) async {
     stdout.writeln('[STATUS] Device is already paired as "${initialDevice.name}".');
   }
 
+  int lastInterval = -1;
+
   // TOTP 60-second loop if not paired
   Timer.periodic(const Duration(seconds: 1), (timer) async {
     if (isPaired) {
@@ -48,8 +50,11 @@ void main(List<String> args) async {
       return;
     }
 
+    final currentInterval = TotpHelper.currentInterval();
     final remaining = TotpHelper.secondsRemaining();
-    if (currentCode.isEmpty || remaining == TotpHelper.periodSeconds) {
+
+    if (currentCode.isEmpty || currentInterval != lastInterval) {
+      lastInterval = currentInterval;
       currentCode = TotpHelper.generatePairingCode(deviceId);
       stdout.writeln('\n[PAIRING] New 60s Dynamic Code Generated: >>> $currentCode <<<');
       stdout.writeln('[PAIRING] Enter this code on your mobile dashboard to claim this PC.');
@@ -69,19 +74,32 @@ void main(List<String> args) async {
   // Main 5-second agent sync loop
   Timer.periodic(const Duration(seconds: 5), (_) async {
     try {
-      // 1. Heartbeat
+      // 1. Single consolidated fetch (Zero N+1)
       final dev = await deviceService.getDevice(deviceId);
       if (dev != null) {
         if (!isPaired) {
           isPaired = true;
           stdout.writeln('\n[SUCCESS] Device claimed! Now active in fleet.');
         }
-        await deviceService.sendHeartbeat(deviceId);
+        await deviceService.sendHeartbeatDirect(deviceId, dev);
 
         // 2. Controlled Session enforcement
         if (dev.isControlledMode && dev.activeSessionId != null) {
           final session = await sessionService.getSession(dev.activeSessionId!);
           if (session != null && session.isActive) {
+            // Check expiry
+            if (session.isExpired) {
+              stdout.writeln('\n[SESSION] Controlled session expired. Ending session and reverting to Owner Mode.');
+              await sessionService.endSession(session.id);
+              if (watchdog.isRunning) {
+                watchdog.stopWatchdog();
+                await hostsFirewall.removeDomainBlocks();
+                await hostsFirewall.restoreInternet();
+                await registry.enableTaskManager();
+              }
+              return;
+            }
+
             if (!watchdog.isRunning) {
               stdout.writeln('[SECURITY] Controlled session engaged. Watchdog ACTIVE.');
               watchdog.startWatchdog(

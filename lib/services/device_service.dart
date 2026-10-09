@@ -21,7 +21,9 @@ class DeviceService {
     if (data == null) return null;
 
     final pairingModel = PairingCodeModel.fromMap(data, cleanCode);
-    if (pairingModel.isExpired) {
+    // Allow 30-second clock skew and transition grace window
+    final isExpired = DateTime.now().isAfter(pairingModel.expiresAt.add(const Duration(seconds: 30)));
+    if (isExpired) {
       // Clean up expired code
       await _dal.deleteDocument('pairing_codes', cleanCode);
       return null;
@@ -59,16 +61,20 @@ class DeviceService {
     return DeviceModel.fromMap(data, deviceId);
   }
 
-  /// Updates heartbeat and online status
-  Future<bool> sendHeartbeat(String deviceId) async {
-    final existing = await getDevice(deviceId);
-    if (existing == null) return false;
-
+  /// Updates heartbeat directly with known device model (prevents redundant N+1 GET)
+  Future<bool> sendHeartbeatDirect(String deviceId, DeviceModel existing) async {
     final updated = existing.copyWith(
       isOnline: true,
       lastHeartbeat: DateTime.now(),
     );
     return await _dal.setDocument('devices', deviceId, updated.toMap());
+  }
+
+  /// Updates heartbeat and online status
+  Future<bool> sendHeartbeat(String deviceId) async {
+    final existing = await getDevice(deviceId);
+    if (existing == null) return false;
+    return await sendHeartbeatDirect(deviceId, existing);
   }
 
   /// Updates device mode (e.g. 'owner' or 'controlled')

@@ -42,7 +42,12 @@ class SessionState extends ChangeNotifier {
       notifyListeners();
     }
     try {
-      _activeSession = await _service.getSession(sessionId);
+      final session = await _service.getSession(sessionId);
+      if (session != null && session.isExpired) {
+        await endSession();
+        return;
+      }
+      _activeSession = session;
     } catch (e) {
       _errorMessage = e.toString();
     } finally {

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../state/app_state.dart';
@@ -50,6 +51,12 @@ class DashboardScreen extends StatelessWidget {
           ],
         ),
         actions: [
+          if (!kIsWeb && defaultTargetPlatform == TargetPlatform.windows)
+            IconButton(
+              onPressed: () => appState.navigateTo(AppView.agentKiosk),
+              icon: const Icon(Icons.monitor_rounded),
+              tooltip: 'شاشة حارس الجهاز (Agent Kiosk)',
+            ),
           ThemeToggleButton(
             isDarkMode: appState.isDarkMode,
             onToggle: appState.toggleTheme,

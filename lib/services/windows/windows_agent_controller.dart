@@ -68,13 +68,19 @@ class WindowsAgentController extends ChangeNotifier {
     _startAgentLoop();
   }
 
+  int _lastInterval = -1;
+
   /// 60s dynamic TOTP loop for unlinked PC
   void _startTotpRenewalLoop() {
+    _lastInterval = -1;
     _refreshPairingCode();
     _totpTimer?.cancel();
     _totpTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      final currentInterval = TotpHelper.currentInterval();
       _pairingSecondsLeft = TotpHelper.secondsRemaining();
-      if (_pairingSecondsLeft == TotpHelper.periodSeconds) {
+
+      if (currentInterval != _lastInterval || _currentPairingCode.isEmpty) {
+        _lastInterval = currentInterval;
         _refreshPairingCode();
       }
       notifyListeners();
@@ -84,6 +90,7 @@ class WindowsAgentController extends ChangeNotifier {
   void _refreshPairingCode() {
     _currentPairingCode = TotpHelper.generatePairingCode(_deviceId);
     _pairingSecondsLeft = TotpHelper.secondsRemaining();
+    _lastInterval = TotpHelper.currentInterval();
 
     // Publish to cloud
     final model = PairingCodeModel(
@@ -104,26 +111,31 @@ class WindowsAgentController extends ChangeNotifier {
   }
 
   Future<void> _syncState() async {
-    // 1. Send heartbeat if paired
-    if (_isPaired) {
-      await _deviceService.sendHeartbeat(_deviceId);
-    } else {
-      // Check if paired just now
-      final dev = await _deviceService.getDevice(_deviceId);
-      if (dev != null) {
+    // Single consolidated fetch (Zero N+1)
+    final dev = await _deviceService.getDevice(_deviceId);
+
+    if (dev != null) {
+      if (!_isPaired) {
         _isPaired = true;
         _totpTimer?.cancel();
         notifyListeners();
       }
-    }
+      // Send heartbeat in single request using cached model
+      await _deviceService.sendHeartbeatDirect(_deviceId, dev);
 
-    // 2. Check active session
-    final dev = await _deviceService.getDevice(_deviceId);
-    if (dev != null && dev.isControlledMode && dev.activeSessionId != null) {
-      final session = await _sessionService.getSession(dev.activeSessionId!);
-      if (session != null && session.isActive) {
-        _handleActiveSession(session);
-        return;
+      // Check active controlled session
+      if (dev.isControlledMode && dev.activeSessionId != null) {
+        final session = await _sessionService.getSession(dev.activeSessionId!);
+        if (session != null && session.isActive) {
+          // If session expired its time limit, auto-terminate and revert
+          if (session.isExpired) {
+            await _sessionService.endSession(session.id);
+            await _revertToOwnerMode();
+            return;
+          }
+          _handleActiveSession(session);
+          return;
+        }
       }
     }
 

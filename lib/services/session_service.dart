@@ -58,9 +58,23 @@ class SessionService {
     if (session == null) return false;
 
     final isPausing = !session.isPrayerPause;
+    int newTotalPaused = session.totalPausedSeconds;
+    DateTime? newPauseStart;
+
+    if (isPausing) {
+      newPauseStart = DateTime.now();
+    } else {
+      if (session.lastPauseStartTime != null) {
+        newTotalPaused += DateTime.now().difference(session.lastPauseStartTime!).inSeconds;
+      }
+      newPauseStart = null;
+    }
+
     final updated = session.copyWith(
       isPrayerPause: isPausing,
       isPaused: isPausing,
+      totalPausedSeconds: newTotalPaused,
+      lastPauseStartTime: newPauseStart,
     );
 
     final success = await _dal.setDocument('sessions', sessionId, updated.toMap());
@@ -81,7 +95,7 @@ class SessionService {
 
     final updated = session.copyWith(
       durationMinutes: session.durationMinutes + extraMinutes,
-      remainingMinutes: session.remainingMinutes + extraMinutes,
+      remainingMinutes: session.computeRemainingMinutes() + extraMinutes,
     );
 
     final success = await _dal.setDocument('sessions', sessionId, updated.toMap());
@@ -93,6 +107,23 @@ class SessionService {
       );
     }
     return success;
+  }
+
+  /// Checks whether an active session has expired and auto-terminates it
+  Future<bool> checkAndUpdateSessionExpiry(String sessionId) async {
+    final session = await getSession(sessionId);
+    if (session == null || !session.isActive) return false;
+
+    if (session.isExpired) {
+      await endSession(sessionId);
+      await logSecurityEvent(
+        session.deviceId,
+        'session_expired',
+        'Session time limit reached. Auto-terminated session and restored Owner Mode.',
+      );
+      return true;
+    }
+    return false;
   }
 
   /// Toggle instant internet killswitch
