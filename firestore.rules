@@ -1,0 +1,36 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Devices collection
+    match /devices/{deviceId} {
+      // Owner or paired client can read and write
+      allow read, write: if true;
+    }
+    
+    // Pairing codes collection
+    match /pairing_codes/{codeId} {
+      allow read, write, delete: if true;
+    }
+    
+    // Sessions collection
+    match /sessions/{sessionId} {
+      allow read, write: if true;
+    }
+    
+    // Security logs
+    match /security_logs/{logId} {
+      allow read, write: if true;
+    }
+    
+    // Settings / App configs
+    match /app_config/{configId} {
+      allow read: if true;
+      allow write: if isAuthenticated();
+    }
+  }
+}
