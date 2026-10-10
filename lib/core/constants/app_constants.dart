@@ -3,7 +3,7 @@ class AppConstants {
   AppConstants._();
 
   static const String appName = 'WardHelm';
-  static const String appVersion = '1.0.0';
+  static const String appVersion = '1.0.1';
   static const String appSubtitle = 'Autonomous Cloud Guardian & PC Fleet Controller';
   static const String githubRepo = 'ehabzimam10-droid/WardHelm';
 

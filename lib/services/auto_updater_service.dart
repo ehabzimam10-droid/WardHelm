@@ -24,11 +24,36 @@ class AutoUpdaterService {
 
   AutoUpdaterService({http.Client? client}) : _client = client ?? http.Client();
 
-  /// Check GitHub repo for the latest published release
+  /// Check Firebase Hosting CDN and GitHub repo for the latest published release
   Future<UpdateInfo> checkForUpdates() async {
     final current = AppConstants.appVersion;
-    final url = Uri.parse('https://api.github.com/repos/${AppConstants.githubRepo}/releases/latest');
 
+    // 1. Check Primary Firebase CDN: https://wardhelm-app.web.app/downloads/version.json
+    try {
+      final cdnUrl = Uri.parse('https://wardhelm-app.web.app/downloads/version.json');
+      final cdnResponse = await _client.get(cdnUrl);
+      if (cdnResponse.statusCode == 200) {
+        final data = json.decode(cdnResponse.body) as Map<String, dynamic>;
+        final latestVersion = (data['version'] as String? ?? '').replaceAll('v', '').trim();
+        final downloadUrl = data['downloadUrl'] as String? ?? '';
+        final releaseNotes = data['releaseNotes'] as String? ?? 'تحديثات أمان وتحسينات في الأداء.';
+
+        if (latestVersion.isNotEmpty && _compareVersions(latestVersion, current) > 0) {
+          return UpdateInfo(
+            hasUpdate: true,
+            currentVersion: current,
+            latestVersion: latestVersion,
+            downloadUrl: downloadUrl.isNotEmpty
+                ? downloadUrl
+                : 'https://wardhelm-app.web.app/downloads/wardhelm_agent.exe',
+            releaseNotes: releaseNotes,
+          );
+        }
+      }
+    } catch (_) {}
+
+    // 2. Fallback to GitHub Releases API
+    final url = Uri.parse('https://api.github.com/repos/${AppConstants.githubRepo}/releases/latest');
     try {
       final response = await _client.get(
         url,
@@ -38,7 +63,7 @@ class AutoUpdaterService {
       if (response.statusCode == 200) {
         final data = json.decode(response.body) as Map<String, dynamic>;
         final tagName = (data['tag_name'] as String? ?? 'v1.0.0').replaceAll('v', '').trim();
-        final body = data['body'] as String? ?? 'Bug fixes and performance improvements.';
+        final body = data['body'] as String? ?? 'تحديث جديد لبرنامج WardHelm.';
         
         final assets = data['assets'] as List<dynamic>? ?? [];
         String downloadUrl = '';
@@ -60,13 +85,13 @@ class AutoUpdaterService {
       }
     } catch (_) {}
 
-    // Fallback if GitHub release is not yet drafted or offline
+    // Fallback if no updates available
     return UpdateInfo(
       hasUpdate: false,
       currentVersion: current,
       latestVersion: current,
-      downloadUrl: 'https://github.com/${AppConstants.githubRepo}',
-      releaseNotes: 'You are running the latest version.',
+      downloadUrl: 'https://wardhelm-app.web.app/downloads/wardhelm_agent.exe',
+      releaseNotes: 'أنت تستخدم أحدث إصدار بالفعل (v$current).',
     );
   }
 

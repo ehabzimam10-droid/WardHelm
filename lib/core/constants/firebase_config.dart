@@ -4,7 +4,7 @@ class FirebaseConfig {
 
   static const String projectId = 'wardhelm-app';
   static const String appId = '1:241268786812:web:wardhelm';
-  static const String apiKey = 'AIzaSyAv1UJBarTIYIUA31PGPVDonjiKxUwbVOs';
+  static const String apiKey = 'AIzaSyD_HZ0lx3tSrz53RPKecc8KpZqD9FNPvF0';
   static const String authDomain = 'wardhelm-app.firebaseapp.com';
   static const String storageBucket = 'wardhelm-app.firebasestorage.app';
   static const String messagingSenderId = '241268786812';
