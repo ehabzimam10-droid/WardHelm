@@ -22,10 +22,10 @@ set "VBS_PATH=%APP_DIR%WardHelm.vbs"
 set "ICON_PATH=%APP_DIR%assets\app_icon.ico"
 
 echo [1/4] إنشاء اختصار قائمة ابدأ (Start Menu)...
-powershell -Command "$s=(New-Object -ComObject WScript.Shell).CreateShortcut([System.Environment]::GetFolderPath('Programs') + '\WardHelm.lnk'); $s.TargetPath='%VBS_PATH%'; $s.WorkingDirectory='%APP_DIR%'; $s.IconLocation='%ICON_PATH%,0'; $s.Description='WardHelm - حارس الحاسوب الذكي وإدارة الجلسات'; $s.Save()"
+powershell -NoProfile -Command "$w = New-Object -ComObject WScript.Shell; $p = [System.IO.Path]::Combine([System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::Programs), 'WardHelm.lnk'); $s = $w.CreateShortcut($p); $s.TargetPath = '%VBS_PATH%'; $s.WorkingDirectory = '%APP_DIR%'; $s.IconLocation = '%ICON_PATH%,0'; $s.Description = 'WardHelm - حارس الحاسوب الذكي وإدارة الجلسات'; $s.Save()"
 
 echo [2/4] إنشاء اختصار سطح المكتب (Desktop)...
-powershell -Command "$s=(New-Object -ComObject WScript.Shell).CreateShortcut([System.Environment]::GetFolderPath('Desktop') + '\WardHelm.lnk'); $s.TargetPath='%VBS_PATH%'; $s.WorkingDirectory='%APP_DIR%'; $s.IconLocation='%ICON_PATH%,0'; $s.Description='WardHelm - حارس الحاسوب الذكي وإدارة الجلسات'; $s.Save()"
+powershell -NoProfile -Command "$w = New-Object -ComObject WScript.Shell; $p = [System.IO.Path]::Combine([System.Environment]::GetFolderPath([System.Environment+SpecialFolder]::Desktop), 'WardHelm.lnk'); $s = $w.CreateShortcut($p); $s.TargetPath = '%VBS_PATH%'; $s.WorkingDirectory = '%APP_DIR%'; $s.IconLocation = '%ICON_PATH%,0'; $s.Description = 'WardHelm - حارس الحاسوب الذكي وإدارة الجلسات'; $s.Save()"
 
 echo [3/4] تفعيل التشغيل التلقائي الصامت عند إقلاع ويندوز...
 reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "WardHelm" /t REG_SZ /d "\"%VBS_PATH%\"" /f >nul
