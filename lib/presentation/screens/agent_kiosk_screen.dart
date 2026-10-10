@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
+import '../../services/auto_updater_service.dart';
 import '../../services/windows/windows_agent_controller.dart';
 import '../../state/app_state.dart';
 import '../widgets/circular_totp_timer.dart';
@@ -67,6 +68,27 @@ class AgentKioskScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('WardHelm PC Agent'),
         actions: [
+          IconButton(
+            onPressed: () async {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('جارٍ فحص التحديثات للوكيل...')),
+              );
+              final info = await AutoUpdaterService().checkForUpdates();
+              if (!context.mounted) return;
+              showDialog(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: Text(info.hasUpdate ? 'يتوفر تحديث جديد: v${info.latestVersion}' : 'الوكيل يعمل على أحدث إصدار (v${info.currentVersion})'),
+                  content: Text(info.hasUpdate ? info.releaseNotes : 'ملفات الوكيل محدثة وتتزامن ذاتياً مع السحابة.'),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('إغلاق')),
+                  ],
+                ),
+              );
+            },
+            icon: const Icon(Icons.system_update_rounded),
+            tooltip: 'فحص التحديثات',
+          ),
           TextButton.icon(
             onPressed: () => appState.navigateTo(AppView.dashboard),
             icon: const Icon(Icons.dashboard_rounded, size: 18),

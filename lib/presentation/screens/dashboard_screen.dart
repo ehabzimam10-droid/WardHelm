@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
+import '../../services/auto_updater_service.dart';
 import '../../state/app_state.dart';
 import '../../state/device_state.dart';
 import '../widgets/device_card.dart';
@@ -24,6 +25,78 @@ class DashboardScreen extends StatelessWidget {
     showDialog(
       context: context,
       builder: (_) => PairingDialog(deviceState: deviceState),
+    );
+  }
+
+  Future<void> _showUpdateDialog(BuildContext context) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const Center(
+        child: Card(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CircularProgressIndicator(),
+                SizedBox(height: 16),
+                Text('جارٍ فحص توفر تحديثات جديدة...'),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final info = await AutoUpdaterService().checkForUpdates();
+    if (!context.mounted) return;
+    Navigator.of(context).pop(); // dismiss loading
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(
+              info.hasUpdate ? Icons.new_releases_rounded : Icons.check_circle_rounded,
+              color: info.hasUpdate ? AppColors.warning : AppColors.success,
+            ),
+            const SizedBox(width: 10),
+            Text(info.hasUpdate ? 'يتوفر تحديث جديد!' : 'أنت على أحدث إصدار'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('الإصدار الحالي: v${info.currentVersion}'),
+            const SizedBox(height: 4),
+            Text('أحدث إصدار: v${info.latestVersion}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            const SizedBox(height: 12),
+            Text(
+              info.hasUpdate
+                  ? 'ملاحظات الإصدار:\n${info.releaseNotes}'
+                  : 'تطبيق الويب وكافة ملفات النظام محدثة بالكامل وتعمل بأحدث التقنيات.',
+              style: const TextStyle(fontSize: 13),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('إغلاق'),
+          ),
+          if (info.hasUpdate)
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                appState.navigateTo(AppView.settings);
+              },
+              child: const Text('الانتقال للتحديثات'),
+            ),
+        ],
+      ),
     );
   }
 
@@ -59,6 +132,11 @@ class DashboardScreen extends StatelessWidget {
               icon: const Icon(Icons.monitor_rounded),
               tooltip: 'شاشة حارس الجهاز (Agent Kiosk)',
             ),
+          IconButton(
+            onPressed: () => _showUpdateDialog(context),
+            icon: const Icon(Icons.system_update_rounded),
+            tooltip: 'فحص وجود تحديثات للنظام',
+          ),
           ThemeToggleButton(
             isDarkMode: appState.isDarkMode,
             onToggle: appState.toggleTheme,

@@ -7,6 +7,8 @@ class DeviceModel {
   final DateTime lastHeartbeat;
   final String mode; // 'owner' or 'controlled'
   final String? activeSessionId;
+  final String? ownerId; // Authenticated user ID (Firebase UID)
+  final String version; // Agent software version e.g. '1.0.0'
   final Map<String, dynamic> metadata;
 
   const DeviceModel({
@@ -17,6 +19,8 @@ class DeviceModel {
     required this.lastHeartbeat,
     required this.mode,
     this.activeSessionId,
+    this.ownerId,
+    this.version = '1.0.0',
     this.metadata = const {},
   });
 
@@ -37,6 +41,8 @@ class DeviceModel {
     DateTime? lastHeartbeat,
     String? mode,
     String? activeSessionId,
+    String? ownerId,
+    String? version,
     Map<String, dynamic>? metadata,
   }) {
     return DeviceModel(
@@ -47,6 +53,8 @@ class DeviceModel {
       lastHeartbeat: lastHeartbeat ?? this.lastHeartbeat,
       mode: mode ?? this.mode,
       activeSessionId: activeSessionId ?? this.activeSessionId,
+      ownerId: ownerId ?? this.ownerId,
+      version: version ?? this.version,
       metadata: metadata ?? this.metadata,
     );
   }
@@ -60,6 +68,8 @@ class DeviceModel {
       'lastHeartbeat': lastHeartbeat.toIso8601String(),
       'mode': mode,
       'activeSessionId': activeSessionId,
+      'ownerId': ownerId,
+      'version': version,
       'metadata': metadata,
     };
   }
@@ -81,6 +91,8 @@ class DeviceModel {
       lastHeartbeat: parsedHeartbeat,
       mode: map['mode'] ?? 'owner',
       activeSessionId: map['activeSessionId'],
+      ownerId: map['ownerId'],
+      version: map['version'] ?? '1.0.0',
       metadata: Map<String, dynamic>.from(map['metadata'] ?? {}),
     );
   }

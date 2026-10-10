@@ -1,8 +1,9 @@
+import '../core/constants/app_constants.dart';
 import '../data/dal/firestore_dal.dart';
 import '../data/models/device_model.dart';
 import '../data/models/pairing_code_model.dart';
 
-/// Orchestrates multi-device fleet management and pairing
+/// Orchestrates multi-device fleet management, user isolation, and remote commands
 class DeviceService {
   final FirestoreDal _dal;
 
@@ -14,8 +15,8 @@ class DeviceService {
   }
 
   /// Claims a pairing code from the Controller Dashboard.
-  /// Instantly pairs the device and deletes the pairing code record so it cannot be reused.
-  Future<DeviceModel?> claimPairingCode(String code, {String? customName}) async {
+  /// Instantly pairs the device to the current owner and deletes the pairing code record.
+  Future<DeviceModel?> claimPairingCode(String code, {String? customName, String? ownerId}) async {
     final cleanCode = code.trim().toUpperCase();
     final data = await _dal.getDocument('pairing_codes', cleanCode);
     if (data == null) return null;
@@ -29,7 +30,7 @@ class DeviceService {
       return null;
     }
 
-    // Register or update device
+    // Register or update device with owner isolation
     final device = DeviceModel(
       id: pairingModel.deviceId,
       name: customName?.isNotEmpty == true ? customName! : pairingModel.deviceName,
@@ -37,6 +38,8 @@ class DeviceService {
       isOnline: true,
       lastHeartbeat: DateTime.now(),
       mode: 'owner',
+      ownerId: ownerId,
+      version: AppConstants.appVersion,
     );
 
     final success = await _dal.setDocument('devices', device.id, device.toMap());
@@ -48,10 +51,15 @@ class DeviceService {
     return null;
   }
 
-  /// Fetches all devices in the fleet
-  Future<List<DeviceModel>> getDevices() async {
+  /// Fetches devices in the fleet, filtered by authenticated owner for privacy
+  Future<List<DeviceModel>> getDevices({String? ownerId}) async {
     final list = await _dal.getCollection('devices');
-    return list.map((m) => DeviceModel.fromMap(m)).toList();
+    final all = list.map((m) => DeviceModel.fromMap(m)).toList();
+    if (ownerId == null || ownerId.isEmpty) {
+      return all;
+    }
+    // Filter to devices owned by this user (or legacy unassigned devices for backwards compatibility)
+    return all.where((d) => d.ownerId == null || d.ownerId == ownerId).toList();
   }
 
   /// Fetches single device by ID
@@ -61,11 +69,34 @@ class DeviceService {
     return DeviceModel.fromMap(data, deviceId);
   }
 
+  /// Sends remote update command to the PC agent
+  Future<bool> sendUpdateCommand(String deviceId, {String? targetVersion}) async {
+    final dev = await getDevice(deviceId);
+    if (dev == null) return false;
+    final updatedMetadata = Map<String, dynamic>.from(dev.metadata);
+    updatedMetadata['pendingCommand'] = 'check_update';
+    if (targetVersion != null) {
+      updatedMetadata['targetVersion'] = targetVersion;
+    }
+    final updated = dev.copyWith(metadata: updatedMetadata);
+    return await _dal.setDocument('devices', deviceId, updated.toMap());
+  }
+
+  /// Clears pending command on the device
+  Future<bool> clearPendingCommand(String deviceId, DeviceModel existing) async {
+    final updatedMetadata = Map<String, dynamic>.from(existing.metadata);
+    updatedMetadata.remove('pendingCommand');
+    updatedMetadata.remove('targetVersion');
+    final updated = existing.copyWith(metadata: updatedMetadata);
+    return await _dal.setDocument('devices', deviceId, updated.toMap());
+  }
+
   /// Updates heartbeat directly with known device model (prevents redundant N+1 GET)
-  Future<bool> sendHeartbeatDirect(String deviceId, DeviceModel existing) async {
+  Future<bool> sendHeartbeatDirect(String deviceId, DeviceModel existing, {String? currentVersion}) async {
     final updated = existing.copyWith(
       isOnline: true,
       lastHeartbeat: DateTime.now(),
+      version: currentVersion ?? existing.version,
     );
     return await _dal.setDocument('devices', deviceId, updated.toMap());
   }

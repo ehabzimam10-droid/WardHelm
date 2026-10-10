@@ -9,14 +9,13 @@ import 'package:wardhelm/services/session_service.dart';
 import 'package:wardhelm/services/windows/process_watchdog_service.dart';
 import 'package:wardhelm/services/windows/hosts_firewall_service.dart';
 import 'package:wardhelm/services/windows/registry_kiosk_service.dart';
+import 'package:wardhelm/services/windows/agent_updater.dart';
 
-/// Standalone Native Windows Agent Executable for WardHelm
-/// Can be compiled to a self-contained .exe via:
-/// `dart compile exe bin/wardhelm_agent.dart -o build/wardhelm_agent.exe`
+/// Standalone Native Windows Agent Executable for WardHelm with Autonomous Auto-Updater
 void main(List<String> args) async {
   stdout.writeln('====================================================');
   stdout.writeln('  🛡️  WardHelm Autonomous Windows Security Agent    ');
-  stdout.writeln('  Version: ${AppConstants.appVersion}             ');
+  stdout.writeln('  Version: v${AppConstants.appVersion}            ');
   stdout.writeln('====================================================');
 
   final deviceService = DeviceService();
@@ -33,6 +32,41 @@ void main(List<String> args) async {
 
   bool isPaired = false;
   String currentCode = '';
+  bool isUpdating = false;
+
+  /// Routine to check and apply auto-updates
+  Future<void> checkAndUpdateAgent({bool silent = false}) async {
+    if (isUpdating) return;
+    try {
+      if (!silent) stdout.writeln('\n[UPDATER] Checking for software updates...');
+      final info = await AgentUpdater.checkForUpdates();
+      if (info.hasUpdate) {
+        stdout.writeln('[UPDATER] Found new update: v${info.latestVersion} (Current: v${info.currentVersion})');
+        stdout.writeln('[UPDATER] Notes: ${info.releaseNotes}');
+        isUpdating = true;
+        // Clean up security rules before upgrading
+        watchdog.stopWatchdog();
+        await hostsFirewall.removeDomainBlocks();
+        await hostsFirewall.restoreInternet();
+        await registry.enableTaskManager();
+
+        final applied = await AgentUpdater.downloadAndApplyUpdate(info);
+        if (!applied) {
+          isUpdating = false;
+        }
+      } else {
+        if (!silent) stdout.writeln('[UPDATER] You are on the latest version (v${info.currentVersion}).');
+      }
+    } catch (e) {
+      if (!silent) stderr.writeln('[UPDATER] Check error: $e');
+    }
+  }
+
+  // Initial update check at launch
+  checkAndUpdateAgent(silent: false);
+
+  // Periodic automatic update check every 30 minutes
+  Timer.periodic(const Duration(minutes: 30), (_) => checkAndUpdateAgent(silent: true));
 
   // Check pairing status
   final initialDevice = await deviceService.getDevice(deviceId);
@@ -73,15 +107,31 @@ void main(List<String> args) async {
 
   // Main 5-second agent sync loop
   Timer.periodic(const Duration(seconds: 5), (_) async {
+    if (isUpdating) return;
+
     try {
-      // 1. Single consolidated fetch (Zero N+1)
+      // 1. Consolidated fetch
       final dev = await deviceService.getDevice(deviceId);
       if (dev != null) {
         if (!isPaired) {
           isPaired = true;
           stdout.writeln('\n[SUCCESS] Device claimed! Now active in fleet.');
         }
-        await deviceService.sendHeartbeatDirect(deviceId, dev);
+
+        // Heartbeat with version stamp
+        await deviceService.sendHeartbeatDirect(
+          deviceId,
+          dev,
+          currentVersion: AppConstants.appVersion,
+        );
+
+        // Check for remote commands from dashboard (e.g. check_update)
+        if (dev.metadata['pendingCommand'] == 'check_update') {
+          stdout.writeln('\n[COMMAND] Remote update command received from dashboard!');
+          await deviceService.clearPendingCommand(deviceId, dev);
+          await checkAndUpdateAgent(silent: false);
+          return;
+        }
 
         // 2. Controlled Session enforcement
         if (dev.isControlledMode && dev.activeSessionId != null) {

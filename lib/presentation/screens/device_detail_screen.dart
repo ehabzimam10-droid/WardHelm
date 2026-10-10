@@ -31,6 +31,25 @@ class DeviceDetailScreen extends StatefulWidget {
 class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
   int _selectedDuration = 30;
   List<String> _selectedApps = List.from(AppConstants.defaultRobloxProcesses);
+  bool _isUpdatingDevice = false;
+
+  Future<void> _triggerRemoteUpdate(DeviceModel dev) async {
+    setState(() => _isUpdatingDevice = true);
+    final success = await widget.deviceState.triggerDeviceUpdate(dev.id);
+    if (!mounted) return;
+    setState(() => _isUpdatingDevice = false);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        backgroundColor: success ? AppColors.success : AppColors.danger,
+        content: Text(
+          success
+              ? 'تم إرسال أمر التحديث إلى ${dev.name} بنجاح! سيقوم الوكيل بالفحص والتحديث التلقائي خلال ثوانٍ.'
+              : 'تعذر إرسال أمر التحديث إلى الجهاز.',
+        ),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -255,6 +274,83 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
                 ),
               ),
             ],
+            const SizedBox(height: 20),
+
+            // Agent Version & Auto-Updater Section
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(Icons.system_update_rounded, color: AppColors.primary, size: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'تحديثات برنامج الوكيل (Agent Auto-Updater)',
+                                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                'التحكم بنسخة البرنامج والتحديث التلقائي عن بُعد',
+                                style: TextStyle(fontSize: 12, color: AppColors.darkTextMuted),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            'الإصدار: v${dev.version}',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    const Text(
+                      'الوكيل مزود بنظام التحديث الذاتي التلقائي. عند الضغط أدناه سيتم إرسال إشعار فوري للبيسي ليقوم بتحميل أحدث ملف تنفيذي وتثبيته وإعادة تشغيل نفسه دون مقاطعة.',
+                      style: TextStyle(fontSize: 13, height: 1.4),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _isUpdatingDevice ? null : () => _triggerRemoteUpdate(dev),
+                        icon: _isUpdatingDevice
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.sync_rounded),
+                        label: Text(_isUpdatingDevice ? 'جارٍ إرسال أمر التحديث...' : 'فحص وتحديث برنامج هذا البيسي الآن'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
             const SizedBox(height: 24),
 
             // Security Audit Logs Section

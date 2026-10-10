@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../data/models/device_model.dart';
+import '../services/auth_service.dart';
 import '../services/device_service.dart';
 
-/// Manages reactive fleet device state and pairing operations
+/// Manages reactive fleet device state and pairing operations with owner privacy
 class DeviceState extends ChangeNotifier {
   final DeviceService _service;
+  final AuthService _authService;
   Timer? _pollTimer;
 
   List<DeviceModel> _devices = [];
@@ -13,7 +15,9 @@ class DeviceState extends ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
 
-  DeviceState({DeviceService? service}) : _service = service ?? DeviceService();
+  DeviceState({DeviceService? service, AuthService? authService})
+      : _service = service ?? DeviceService(),
+        _authService = authService ?? AuthService();
 
   List<DeviceModel> get devices => _devices;
   DeviceModel? get selectedDevice => _selectedDevice;
@@ -29,6 +33,9 @@ class DeviceState extends ChangeNotifier {
   void stopPolling() {
     _pollTimer?.cancel();
     _pollTimer = null;
+    _devices = [];
+    _selectedDevice = null;
+    notifyListeners();
   }
 
   Future<void> refreshDevices({bool silent = false}) async {
@@ -37,7 +44,8 @@ class DeviceState extends ChangeNotifier {
       notifyListeners();
     }
     try {
-      _devices = await _service.getDevices();
+      final currentUserId = await _authService.getCurrentUserId();
+      _devices = await _service.getDevices(ownerId: currentUserId);
       if (_selectedDevice != null) {
         _selectedDevice = _devices.firstWhere(
           (d) => d.id == _selectedDevice!.id,
@@ -63,13 +71,18 @@ class DeviceState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Claims pairing code
+  /// Claims pairing code and assigns device to the authenticated user
   Future<bool> pairDevice(String code, {String? customName}) async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
-    final device = await _service.claimPairingCode(code, customName: customName);
+    final currentUserId = await _authService.getCurrentUserId();
+    final device = await _service.claimPairingCode(
+      code,
+      customName: customName,
+      ownerId: currentUserId,
+    );
     _isLoading = false;
 
     if (device != null) {
@@ -78,10 +91,19 @@ class DeviceState extends ChangeNotifier {
       notifyListeners();
       return true;
     } else {
-      _errorMessage = 'Invalid or expired pairing code';
+      _errorMessage = 'رمز الربط غير صحيح أو انتهت صلاحيته (مدته 60 ثانية)';
       notifyListeners();
       return false;
     }
+  }
+
+  /// Sends a remote command to trigger auto-update on a specific PC agent
+  Future<bool> triggerDeviceUpdate(String deviceId, {String? targetVersion}) async {
+    final success = await _service.sendUpdateCommand(deviceId, targetVersion: targetVersion);
+    if (success) {
+      await refreshDevices(silent: true);
+    }
+    return success;
   }
 
   @override

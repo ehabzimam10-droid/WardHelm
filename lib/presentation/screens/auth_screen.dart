@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../services/auth_service.dart';
 
-/// Full authentication screen supporting Google Sign-In and Email/Password Accounts
+/// Production authentication screen supporting Google Sign-In and private user accounts
 class AuthScreen extends StatefulWidget {
   final VoidCallback onAuthenticated;
 
@@ -12,7 +12,7 @@ class AuthScreen extends StatefulWidget {
   State<AuthScreen> createState() => _AuthScreenState();
 }
 
-enum _AuthMode { signIn, signUp, quickPin }
+enum _AuthMode { signIn, signUp }
 
 class _AuthScreenState extends State<AuthScreen> {
   final AuthService _authService = AuthService();
@@ -20,7 +20,6 @@ class _AuthScreenState extends State<AuthScreen> {
 
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _pinController = TextEditingController();
 
   bool _isLoading = false;
   bool _isGoogleLoading = false;
@@ -73,31 +72,10 @@ class _AuthScreenState extends State<AuthScreen> {
     }
   }
 
-  Future<void> _submitPin() async {
-    final pin = _pinController.text.trim();
-    if (pin.isEmpty) return;
-
-    setState(() {
-      _isLoading = true;
-      _error = null;
-    });
-
-    final success = await _authService.login(pin);
-    if (!mounted) return;
-    setState(() => _isLoading = false);
-
-    if (success) {
-      widget.onAuthenticated();
-    } else {
-      setState(() => _error = 'رمز PIN غير صحيح. الرمز الافتراضي هو 1234');
-    }
-  }
-
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
-    _pinController.dispose();
     super.dispose();
   }
 
@@ -145,10 +123,8 @@ class _AuthScreenState extends State<AuthScreen> {
                     const SizedBox(height: 6),
                     Text(
                       _mode == _AuthMode.signUp
-                          ? 'أنشئ حسابك المستقل لإدارة وحماية أجهزتك'
-                          : _mode == _AuthMode.signIn
-                              ? 'تسجيل الدخول إلى حسابك السحابي المحمي'
-                              : 'دخول سريع للمالك برمز PIN',
+                          ? 'أنشئ حسابك الخاص المعزول لإدارة أجهزتك بأمان'
+                          : 'تسجيل الدخول إلى حسابك السحابي المحمي',
                       textAlign: TextAlign.center,
                       style: const TextStyle(fontSize: 13, color: AppColors.darkTextMuted),
                     ),
@@ -237,12 +213,6 @@ class _AuthScreenState extends State<AuthScreen> {
                               mode: _AuthMode.signUp,
                             ),
                           ),
-                          Expanded(
-                            child: _buildModeTab(
-                              title: 'رمز PIN',
-                              mode: _AuthMode.quickPin,
-                            ),
-                          ),
                         ],
                       ),
                     ),
@@ -274,87 +244,51 @@ class _AuthScreenState extends State<AuthScreen> {
                       ),
                     ],
 
-                    // Inputs Based on Mode
-                    if (_mode == _AuthMode.quickPin) ...[
-                      TextField(
-                        controller: _pinController,
-                        obscureText: true,
-                        keyboardType: TextInputType.number,
-                        autofocus: true,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          fontSize: 22,
-                          letterSpacing: 8,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        decoration: const InputDecoration(
-                          hintText: '••••',
-                          labelText: 'رمز PIN المالك',
-                          helperText: 'الرمز الافتراضي هو 1234',
-                        ),
-                        onSubmitted: (_) => _submitPin(),
+                    // Email & Password Fields
+                    TextField(
+                      controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      decoration: const InputDecoration(
+                        labelText: 'البريد الإلكتروني',
+                        hintText: 'name@example.com',
+                        prefixIcon: Icon(Icons.email_outlined),
                       ),
-                      const SizedBox(height: 20),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 46,
-                        child: ElevatedButton(
-                          onPressed: _isLoading ? null : _submitPin,
-                          child: _isLoading
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                )
-                              : const Text('دخول لوحة التحكم'),
-                        ),
-                      ),
-                    ] else ...[
-                      TextField(
-                        controller: _emailController,
-                        keyboardType: TextInputType.emailAddress,
-                        decoration: const InputDecoration(
-                          labelText: 'البريد الإلكتروني',
-                          hintText: 'name@example.com',
-                          prefixIcon: Icon(Icons.email_outlined),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      TextField(
-                        controller: _passwordController,
-                        obscureText: _obscurePassword,
-                        decoration: InputDecoration(
-                          labelText: 'كلمة المرور',
-                          hintText: '••••••••',
-                          prefixIcon: const Icon(Icons.lock_outline),
-                          suffixIcon: IconButton(
-                            icon: Icon(
-                              _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                            ),
-                            onPressed: () =>
-                                setState(() => _obscurePassword = !_obscurePassword),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: _passwordController,
+                      obscureText: _obscurePassword,
+                      decoration: InputDecoration(
+                        labelText: 'كلمة المرور',
+                        hintText: '••••••••',
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _obscurePassword ? Icons.visibility_off : Icons.visibility,
                           ),
-                        ),
-                        onSubmitted: (_) => _submitEmailAuth(),
-                      ),
-                      const SizedBox(height: 20),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 46,
-                        child: ElevatedButton(
-                          onPressed: _isLoading ? null : _submitEmailAuth,
-                          child: _isLoading
-                              ? const SizedBox(
-                                  height: 20,
-                                  width: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                )
-                              : Text(_mode == _AuthMode.signUp
-                                  ? 'إنشاء حساب جديد'
-                                  : 'تسجيل الدخول'),
+                          onPressed: () =>
+                              setState(() => _obscurePassword = !_obscurePassword),
                         ),
                       ),
-                    ],
+                      onSubmitted: (_) => _submitEmailAuth(),
+                    ),
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 46,
+                      child: ElevatedButton(
+                        onPressed: _isLoading ? null : _submitEmailAuth,
+                        child: _isLoading
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              )
+                            : Text(_mode == _AuthMode.signUp
+                                ? 'إنشاء الحساب ومتابعة'
+                                : 'تسجيل الدخول'),
+                      ),
+                    ),
                   ],
                 ),
               ),

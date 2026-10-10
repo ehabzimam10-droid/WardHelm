@@ -11,7 +11,6 @@ class AuthService {
   static const String _userEmailKey = 'wardhelm_user_email';
   static const String _userIdKey = 'wardhelm_user_id';
   static const String _idTokenKey = 'wardhelm_id_token';
-  static const String _defaultPin = '1234'; // Default initial owner master PIN
 
   final SharedPreferences? _prefs;
   final http.Client _client;
@@ -208,27 +207,6 @@ class AuthService {
     }
   }
 
-  /// Authenticate with PIN / Master Password (Quick Access)
-  Future<bool> login(String pin) async {
-    final prefs = _prefs ?? await SharedPreferences.getInstance();
-    final savedPin = prefs.getString('wardhelm_master_pin') ?? _defaultPin;
-    if (pin.trim() == savedPin) {
-      await prefs.setBool(_authKey, true);
-      return true;
-    }
-    return false;
-  }
-
-  /// Change master PIN
-  Future<bool> changePin(String oldPin, String newPin) async {
-    final prefs = _prefs ?? await SharedPreferences.getInstance();
-    final savedPin = prefs.getString('wardhelm_master_pin') ?? _defaultPin;
-    if (oldPin.trim() == savedPin && newPin.trim().length >= 4) {
-      await prefs.setString('wardhelm_master_pin', newPin.trim());
-      return true;
-    }
-    return false;
-  }
 
   /// Sign out
   Future<void> logout() async {
