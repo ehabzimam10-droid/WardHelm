@@ -1,22 +1,21 @@
 @echo off
-title WardHelm - Windows Security Agent
+title WardHelm Launcher
 cd /d "%~dp0"
-
-:: Auto-detect location of wardhelm_agent.exe
-set "EXE_PATH=%~dp0wardhelm_agent.exe"
-if not exist "%EXE_PATH%" (
-    if exist "%~dp0build\wardhelm_agent.exe" (
-        set "EXE_PATH=%~dp0build\wardhelm_agent.exe"
-    )
-)
 
 :: Check for Administrator privileges and elevate seamlessly
 net session >nul 2>&1
 if %errorlevel% neq 0 (
-    powershell -Command "Start-Process '%EXE_PATH%' -Verb RunAs"
+    powershell -Command "Start-Process '%~f0' -Verb RunAs"
     exit /b
 )
 
-:: Launch the WardHelm Agent and its Graphical Desktop UI Window
-start "" "%EXE_PATH%"
+:: Launch completely silently via VBScript (zero CMD flicker)
+if exist "%~dp0WardHelm.vbs" (
+    start "" wscript.exe "%~dp0WardHelm.vbs"
+    exit
+)
+
+set "EXE_PATH=%~dp0wardhelm_agent.exe"
+if not exist "%EXE_PATH%" set "EXE_PATH=%~dp0build\wardhelm_agent.exe"
+powershell -NoProfile -WindowStyle Hidden -Command "Start-Process '%EXE_PATH%'"
 exit

@@ -1,5 +1,5 @@
 {
-  "version": "1.0.1",
-  "downloadUrl": "https://github.com/ehabzimam10-droid/WardHelm/releases/download/v1.0.1/wardhelm_agent.exe",
-  "releaseNotes": "واجهة سطح مكتب رسومية تفاعلية حديثة، محرك تحديث سحابي ذكي ومستقل، وتوافق كامل مع حسابات Google والبريد الإلكتروني."
+  "version": "1.0.2",
+  "downloadUrl": "https://github.com/ehabzimam10-droid/WardHelm/releases/download/v1.0.2/wardhelm_agent.exe",
+  "releaseNotes": "تشغيل صامت بالخلفية بدون شاشة CMD، أيقونة شريط المهام (System Tray)، اختصارات قائمة ابدأ وسطح المكتب، وإصلاح كامل للمصادقة السحابية."
 }

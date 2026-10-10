@@ -10,13 +10,27 @@ class FirestoreDal {
 
   FirestoreDal({http.Client? client}) : _client = client ?? http.Client();
 
+  static String? authToken;
+
   String get _baseUrl => FirebaseConfig.firestoreRestUrl;
+  String get _apiKeyParam => '?key=${FirebaseConfig.apiKey}';
+
+  Map<String, String> _headers([Map<String, String>? extra]) {
+    final headers = <String, String>{
+      'Content-Type': 'application/json',
+    };
+    if (authToken != null && authToken!.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $authToken';
+    }
+    if (extra != null) headers.addAll(extra);
+    return headers;
+  }
 
   /// Fetch a single document
   Future<Map<String, dynamic>?> getDocument(String collection, String docId) async {
-    final uri = Uri.parse('$_baseUrl/$collection/$docId');
+    final uri = Uri.parse('$_baseUrl/$collection/$docId$_apiKeyParam');
     try {
-      final response = await _client.get(uri);
+      final response = await _client.get(uri, headers: _headers());
       if (response.statusCode == 200) {
         final decoded = json.decode(response.body) as Map<String, dynamic>;
         return _decodeFirestoreFields(decoded['fields'] as Map<String, dynamic>? ?? {});
@@ -29,9 +43,9 @@ class FirestoreDal {
 
   /// List all documents in a collection
   Future<List<Map<String, dynamic>>> getCollection(String collection) async {
-    final uri = Uri.parse('$_baseUrl/$collection');
+    final uri = Uri.parse('$_baseUrl/$collection$_apiKeyParam');
     try {
-      final response = await _client.get(uri);
+      final response = await _client.get(uri, headers: _headers());
       if (response.statusCode == 200) {
         final decoded = json.decode(response.body) as Map<String, dynamic>;
         final documents = decoded['documents'] as List<dynamic>? ?? [];
@@ -52,7 +66,7 @@ class FirestoreDal {
 
   /// Create or update a document
   Future<bool> setDocument(String collection, String docId, Map<String, dynamic> data) async {
-    final uri = Uri.parse('$_baseUrl/$collection/$docId');
+    final uri = Uri.parse('$_baseUrl/$collection/$docId$_apiKeyParam');
     final body = json.encode({
       'fields': _encodeFirestoreFields(data),
     });
@@ -60,7 +74,7 @@ class FirestoreDal {
     try {
       final response = await _client.patch(
         uri,
-        headers: {'Content-Type': 'application/json'},
+        headers: _headers(),
         body: body,
       );
       return response.statusCode == 200 || response.statusCode == 201;
@@ -71,9 +85,9 @@ class FirestoreDal {
 
   /// Delete a document
   Future<bool> deleteDocument(String collection, String docId) async {
-    final uri = Uri.parse('$_baseUrl/$collection/$docId');
+    final uri = Uri.parse('$_baseUrl/$collection/$docId$_apiKeyParam');
     try {
-      final response = await _client.delete(uri);
+      final response = await _client.delete(uri, headers: _headers());
       return response.statusCode == 200;
     } catch (_) {
       return false;

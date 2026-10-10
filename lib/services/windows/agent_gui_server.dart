@@ -18,6 +18,7 @@ class AgentGuiServer {
   bool isPrayerPause = false;
   bool isInternetBlocked = false;
   Future<void> Function()? onCheckUpdateRequested;
+  Future<void> Function()? onExitRequested;
 
   AgentGuiServer({this.port = 48123});
 
@@ -48,11 +49,27 @@ class AgentGuiServer {
           return;
         }
 
+        if (path == '/open_gui' && request.method == 'POST') {
+          request.response.headers.contentType = ContentType.json;
+          launchWindow();
+          request.response.write(json.encode({'status': 'opened'}));
+          await request.response.close();
+          return;
+        }
+
         if (path == '/check_update' && request.method == 'POST') {
           request.response.headers.contentType = ContentType.json;
           onCheckUpdateRequested?.call();
           request.response.write(json.encode({'status': 'triggered'}));
           await request.response.close();
+          return;
+        }
+
+        if (path == '/exit' && request.method == 'POST') {
+          request.response.headers.contentType = ContentType.json;
+          request.response.write(json.encode({'status': 'exiting'}));
+          await request.response.close();
+          onExitRequested?.call();
           return;
         }
 

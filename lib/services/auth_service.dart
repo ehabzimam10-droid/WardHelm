@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../core/constants/firebase_config.dart';
+import '../data/dal/firestore_dal.dart';
 
 /// Service managing authentication and owner authorization
 class AuthService {
@@ -27,11 +28,20 @@ class AuthService {
         if (currentUser != null) {
           final prefs = _prefs ?? await SharedPreferences.getInstance();
           await prefs.setBool(_authKey, true);
+          final token = await currentUser.getIdToken();
+          if (token != null) {
+            await prefs.setString(_idTokenKey, token);
+            FirestoreDal.authToken = token;
+          }
           return true;
         }
       } catch (_) {}
     }
     final prefs = _prefs ?? await SharedPreferences.getInstance();
+    final token = prefs.getString(_idTokenKey);
+    if (token != null && token.isNotEmpty) {
+      FirestoreDal.authToken = token;
+    }
     return prefs.getBool(_authKey) ?? false;
   }
 
@@ -74,7 +84,10 @@ class AuthService {
           await prefs.setString(_userEmailKey, user.email ?? '');
           await prefs.setString(_userIdKey, user.uid);
           final token = await user.getIdToken();
-          if (token != null) await prefs.setString(_idTokenKey, token);
+          if (token != null) {
+            await prefs.setString(_idTokenKey, token);
+            FirestoreDal.authToken = token;
+          }
           return (success: true, error: null, userId: user.uid);
         }
       }
@@ -112,7 +125,10 @@ class AuthService {
           await prefs.setString(_userEmailKey, user.email ?? email);
           await prefs.setString(_userIdKey, user.uid);
           final token = await user.getIdToken();
-          if (token != null) await prefs.setString(_idTokenKey, token);
+          if (token != null) {
+            await prefs.setString(_idTokenKey, token);
+            FirestoreDal.authToken = token;
+          }
           return (success: true, error: null, userId: user.uid);
         }
       } on FirebaseAuthException catch (e) {
@@ -138,10 +154,12 @@ class AuthService {
       final data = json.decode(response.body) as Map<String, dynamic>;
       if (response.statusCode == 200) {
         final prefs = _prefs ?? await SharedPreferences.getInstance();
+        final token = data['idToken'] as String? ?? '';
         await prefs.setBool(_authKey, true);
         await prefs.setString(_userEmailKey, data['email'] as String? ?? email);
         await prefs.setString(_userIdKey, data['localId'] as String? ?? '');
-        await prefs.setString(_idTokenKey, data['idToken'] as String? ?? '');
+        await prefs.setString(_idTokenKey, token);
+        FirestoreDal.authToken = token;
         return (success: true, error: null, userId: data['localId'] as String?);
       } else {
         final errorMessage = _parseAuthError(data);
@@ -167,7 +185,10 @@ class AuthService {
           await prefs.setString(_userEmailKey, user.email ?? email);
           await prefs.setString(_userIdKey, user.uid);
           final token = await user.getIdToken();
-          if (token != null) await prefs.setString(_idTokenKey, token);
+          if (token != null) {
+            await prefs.setString(_idTokenKey, token);
+            FirestoreDal.authToken = token;
+          }
           return (success: true, error: null, userId: user.uid);
         }
       } on FirebaseAuthException catch (e) {
@@ -193,10 +214,12 @@ class AuthService {
       final data = json.decode(response.body) as Map<String, dynamic>;
       if (response.statusCode == 200) {
         final prefs = _prefs ?? await SharedPreferences.getInstance();
+        final token = data['idToken'] as String? ?? '';
         await prefs.setBool(_authKey, true);
         await prefs.setString(_userEmailKey, data['email'] as String? ?? email);
         await prefs.setString(_userIdKey, data['localId'] as String? ?? '');
-        await prefs.setString(_idTokenKey, data['idToken'] as String? ?? '');
+        await prefs.setString(_idTokenKey, token);
+        FirestoreDal.authToken = token;
         return (success: true, error: null, userId: data['localId'] as String?);
       } else {
         final errorMessage = _parseAuthError(data);
@@ -210,6 +233,7 @@ class AuthService {
 
   /// Sign out
   Future<void> logout() async {
+    FirestoreDal.authToken = null;
     if (kIsWeb) {
       try {
         await FirebaseAuth.instance.signOut();

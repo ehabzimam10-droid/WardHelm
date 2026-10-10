@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ffi';
 import 'dart:io';
 import 'package:wardhelm/core/constants/app_constants.dart';
 import 'package:wardhelm/core/utils/system_info_helper.dart';
@@ -12,8 +13,88 @@ import 'package:wardhelm/services/windows/registry_kiosk_service.dart';
 import 'package:wardhelm/services/windows/agent_updater.dart';
 import 'package:wardhelm/services/windows/agent_gui_server.dart';
 
+typedef _GetConsoleWindowNative = IntPtr Function();
+typedef _GetConsoleWindowDart = int Function();
+typedef _ShowWindowNative = Int32 Function(IntPtr hwnd, Int32 nCmdShow);
+typedef _ShowWindowDart = int Function(int hwnd, int nCmdShow);
+
+/// Hide console window via Windows Win32 API
+void _hideConsoleWindow() {
+  if (!Platform.isWindows) return;
+  try {
+    final kernel32 = DynamicLibrary.open('kernel32.dll');
+    final user32 = DynamicLibrary.open('user32.dll');
+
+    final getConsoleWindow = kernel32
+        .lookupFunction<_GetConsoleWindowNative, _GetConsoleWindowDart>('GetConsoleWindow');
+    final showWindow = user32
+        .lookupFunction<_ShowWindowNative, _ShowWindowDart>('ShowWindow');
+
+    final hwnd = getConsoleWindow();
+    if (hwnd != 0) {
+      showWindow(hwnd, 0); // SW_HIDE = 0
+    }
+  } catch (_) {}
+}
+
+/// Spawn native Windows System Tray helper in background
+void _startSystemTrayIcon() {
+  if (!Platform.isWindows) return;
+  try {
+    final exeDir = File(Platform.resolvedExecutable).parent.path;
+    var trayScript = '$exeDir\\wardhelm_tray.ps1';
+    var iconPath = '$exeDir\\assets\\app_icon.ico';
+    
+    if (!File(trayScript).existsSync()) {
+      trayScript = '${Directory.current.path}\\wardhelm_tray.ps1';
+    }
+    if (!File(iconPath).existsSync()) {
+      iconPath = '${Directory.current.path}\\assets\\app_icon.ico';
+    }
+
+    if (File(trayScript).existsSync()) {
+      Process.start(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-WindowStyle',
+          'Hidden',
+          '-ExecutionPolicy',
+          'Bypass',
+          '-File',
+          trayScript,
+          '-AgentPid',
+          pid.toString(),
+          '-IconPath',
+          iconPath,
+        ],
+        mode: ProcessStartMode.detached,
+      );
+    }
+  } catch (_) {}
+}
+
 /// Standalone Native Windows Agent Executable for WardHelm with Graphical UI Window
 void main(List<String> args) async {
+  // 1. Instantly hide any allocated console window
+  _hideConsoleWindow();
+
+  // 2. Single-instance check: If already running, activate GUI and exit gracefully
+  try {
+    final client = HttpClient();
+    client.connectionTimeout = const Duration(milliseconds: 600);
+    final req = await client.getUrl(Uri.parse('http://127.0.0.1:48123/status'));
+    final res = await req.close();
+    if (res.statusCode == 200) {
+      try {
+        final openReq = await client.postUrl(Uri.parse('http://127.0.0.1:48123/open_gui'));
+        await openReq.close();
+      } catch (_) {}
+      AgentGuiServer().launchWindow();
+      exit(0);
+    }
+  } catch (_) {}
+
   stdout.writeln('====================================================');
   stdout.writeln('  🛡️  WardHelm Autonomous Windows Security Agent    ');
   stdout.writeln('  Version: v${AppConstants.appVersion}            ');
@@ -41,6 +122,18 @@ void main(List<String> args) async {
   guiServer.deviceId = deviceId;
   await guiServer.start();
   guiServer.launchWindow();
+
+  // Start background System Tray (Notification Area) Icon
+  _startSystemTrayIcon();
+
+  guiServer.onExitRequested = () async {
+    stdout.writeln('[SHUTDOWN] Exit requested from System Tray. Restoring policies...');
+    watchdog.stopWatchdog();
+    await hostsFirewall.removeDomainBlocks();
+    await hostsFirewall.restoreInternet();
+    await registry.enableTaskManager();
+    exit(0);
+  };
 
   /// Routine to check and apply auto-updates
   Future<void> checkAndUpdateAgent({bool silent = false}) async {
