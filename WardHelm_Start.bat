@@ -10,21 +10,13 @@ if not exist "%EXE_PATH%" (
     )
 )
 
-echo ==========================================================
-echo        WardHelm Autonomous PC Security Agent
-echo ==========================================================
-echo.
-echo Starting WardHelm Security Agent in Administrator Mode...
-echo.
-
-:: Check for Administrator privileges
+:: Check for Administrator privileges and elevate seamlessly
 net session >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [ATTENTION] Requesting Administrator Privileges...
     powershell -Command "Start-Process '%EXE_PATH%' -Verb RunAs"
     exit /b
 )
 
-:: Run directly if already elevated
-"%EXE_PATH%"
-pause
+:: Launch the WardHelm Agent and its Graphical Desktop UI Window
+start "" "%EXE_PATH%"
+exit

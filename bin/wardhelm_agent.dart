@@ -10,8 +10,9 @@ import 'package:wardhelm/services/windows/process_watchdog_service.dart';
 import 'package:wardhelm/services/windows/hosts_firewall_service.dart';
 import 'package:wardhelm/services/windows/registry_kiosk_service.dart';
 import 'package:wardhelm/services/windows/agent_updater.dart';
+import 'package:wardhelm/services/windows/agent_gui_server.dart';
 
-/// Standalone Native Windows Agent Executable for WardHelm with Autonomous Auto-Updater
+/// Standalone Native Windows Agent Executable for WardHelm with Graphical UI Window
 void main(List<String> args) async {
   stdout.writeln('====================================================');
   stdout.writeln('  🛡️  WardHelm Autonomous Windows Security Agent    ');
@@ -33,6 +34,13 @@ void main(List<String> args) async {
   bool isPaired = false;
   String currentCode = '';
   bool isUpdating = false;
+
+  // Initialize and start embedded graphical desktop GUI window
+  final guiServer = AgentGuiServer();
+  guiServer.deviceName = deviceName;
+  guiServer.deviceId = deviceId;
+  await guiServer.start();
+  guiServer.launchWindow();
 
   /// Routine to check and apply auto-updates
   Future<void> checkAndUpdateAgent({bool silent = false}) async {
@@ -62,6 +70,8 @@ void main(List<String> args) async {
     }
   }
 
+  guiServer.onCheckUpdateRequested = () => checkAndUpdateAgent(silent: false);
+
   // Initial update check at launch
   checkAndUpdateAgent(silent: false);
 
@@ -72,24 +82,29 @@ void main(List<String> args) async {
   final initialDevice = await deviceService.getDevice(deviceId);
   if (initialDevice != null) {
     isPaired = true;
+    guiServer.isPaired = true;
     stdout.writeln('[STATUS] Device is already paired as "${initialDevice.name}".');
   }
 
   int lastInterval = -1;
 
-  // TOTP 60-second loop if not paired
+  // TOTP 60-second loop
   Timer.periodic(const Duration(seconds: 1), (timer) async {
+    final remaining = TotpHelper.secondsRemaining();
+    guiServer.remainingSeconds = remaining;
+
     if (isPaired) {
+      guiServer.isPaired = true;
       timer.cancel();
       return;
     }
 
     final currentInterval = TotpHelper.currentInterval();
-    final remaining = TotpHelper.secondsRemaining();
 
     if (currentCode.isEmpty || currentInterval != lastInterval) {
       lastInterval = currentInterval;
       currentCode = TotpHelper.generatePairingCode(deviceId);
+      guiServer.currentCode = currentCode;
       stdout.writeln('\n[PAIRING] New 60s Dynamic Code Generated: >>> $currentCode <<<');
       stdout.writeln('[PAIRING] Enter this code on your mobile dashboard to claim this PC.');
 
@@ -115,8 +130,13 @@ void main(List<String> args) async {
       if (dev != null) {
         if (!isPaired) {
           isPaired = true;
+          guiServer.isPaired = true;
           stdout.writeln('\n[SUCCESS] Device claimed! Now active in fleet.');
         }
+
+        guiServer.isPaired = true;
+        guiServer.mode = dev.mode;
+        guiServer.isControlled = dev.isControlledMode;
 
         // Heartbeat with version stamp
         await deviceService.sendHeartbeatDirect(
@@ -137,6 +157,10 @@ void main(List<String> args) async {
         if (dev.isControlledMode && dev.activeSessionId != null) {
           final session = await sessionService.getSession(dev.activeSessionId!);
           if (session != null && session.isActive) {
+            guiServer.sessionMinutesLeft = session.remainingMinutes;
+            guiServer.isPrayerPause = session.isPrayerPause;
+            guiServer.isInternetBlocked = session.isInternetBlocked;
+
             // Check expiry
             if (session.isExpired) {
               stdout.writeln('\n[SESSION] Controlled session expired. Ending session and reverting to Owner Mode.');
@@ -147,6 +171,7 @@ void main(List<String> args) async {
                 await hostsFirewall.restoreInternet();
                 await registry.enableTaskManager();
               }
+              guiServer.isControlled = false;
               return;
             }
 
@@ -183,6 +208,8 @@ void main(List<String> args) async {
             }
             return;
           }
+        } else {
+          guiServer.isControlled = false;
         }
       }
 
@@ -193,6 +220,7 @@ void main(List<String> args) async {
         await hostsFirewall.removeDomainBlocks();
         await hostsFirewall.restoreInternet();
         await registry.enableTaskManager();
+        guiServer.isControlled = false;
       }
     } catch (e) {
       stderr.writeln('[ERROR] Agent loop error: $e');
