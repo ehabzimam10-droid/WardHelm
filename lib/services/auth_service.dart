@@ -238,6 +238,8 @@ class AuthService {
         return 'تم تعطيل هذا الحساب. يرجى التواصل مع الإدارة.';
       case 'operation-not-allowed':
         return 'طريقة تسجيل الدخول غير مفعلة في إعدادات المشروع.';
+      case 'unauthorized-domain':
+        return 'هذا النطاق غير مضاف في قائمة النطاقات المصرح بها لـ Google. يمكنك الدخول عبر الرابط المعتمد: https://wardhelm-app.firebaseapp.com أو إضافة النطاق في Firebase Console.';
       default:
         return 'خطأ في المصادقة ($code)';
     }
