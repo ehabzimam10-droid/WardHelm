@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../services/auth_service.dart';
 
-/// Full authentication screen supporting Email/Password Accounts and Quick PIN
+/// Full authentication screen supporting Google Sign-In and Email/Password Accounts
 class AuthScreen extends StatefulWidget {
   final VoidCallback onAuthenticated;
 
@@ -23,8 +23,27 @@ class _AuthScreenState extends State<AuthScreen> {
   final TextEditingController _pinController = TextEditingController();
 
   bool _isLoading = false;
+  bool _isGoogleLoading = false;
   String? _error;
   bool _obscurePassword = true;
+
+  Future<void> _submitGoogleSignIn() async {
+    setState(() {
+      _isGoogleLoading = true;
+      _error = null;
+    });
+
+    final result = await _authService.signInWithGoogle();
+
+    if (!mounted) return;
+    setState(() => _isGoogleLoading = false);
+
+    if (result.success) {
+      widget.onAuthenticated();
+    } else {
+      setState(() => _error = result.error);
+    }
+  }
 
   Future<void> _submitEmailAuth() async {
     final email = _emailController.text.trim();
@@ -44,6 +63,7 @@ class _AuthScreenState extends State<AuthScreen> {
         ? await _authService.signUp(email, password)
         : await _authService.signIn(email, password);
 
+    if (!mounted) return;
     setState(() => _isLoading = false);
 
     if (result.success) {
@@ -63,6 +83,7 @@ class _AuthScreenState extends State<AuthScreen> {
     });
 
     final success = await _authService.login(pin);
+    if (!mounted) return;
     setState(() => _isLoading = false);
 
     if (success) {
@@ -73,15 +94,26 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _pinController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 420),
+            constraints: const BoxConstraints(maxWidth: 440),
             child: Card(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              elevation: 4,
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 36),
                 child: Column(
@@ -113,22 +145,82 @@ class _AuthScreenState extends State<AuthScreen> {
                     const SizedBox(height: 6),
                     Text(
                       _mode == _AuthMode.signUp
-                          ? 'إنشاء حساب مالك جديد مستقل'
+                          ? 'أنشئ حسابك المستقل لإدارة وحماية أجهزتك'
                           : _mode == _AuthMode.signIn
-                              ? 'تسجيل الدخول إلى حسابك السحابي'
+                              ? 'تسجيل الدخول إلى حسابك السحابي المحمي'
                               : 'دخول سريع للمالك برمز PIN',
                       textAlign: TextAlign.center,
                       style: const TextStyle(fontSize: 13, color: AppColors.darkTextMuted),
                     ),
                     const SizedBox(height: 24),
 
+                    // Direct Google Sign-In Button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: OutlinedButton(
+                        onPressed: (_isGoogleLoading || _isLoading) ? null : _submitGoogleSignIn,
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(
+                            color: isDark ? Colors.white24 : Colors.grey.shade300,
+                            width: 1.2,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          backgroundColor: isDark
+                              ? Colors.white.withOpacity(0.04)
+                              : Colors.white,
+                        ),
+                        child: _isGoogleLoading
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  _buildGoogleBadge(),
+                                  const SizedBox(width: 12),
+                                  Text(
+                                    'المتابعة باستخدام Google',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 14,
+                                      color: isDark ? Colors.white : Colors.black87,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Divider with text
+                    Row(
+                      children: [
+                        Expanded(child: Divider(color: isDark ? Colors.white12 : Colors.grey.shade300)),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Text(
+                            'أو بالبريد الإلكتروني',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark ? Colors.white54 : Colors.grey.shade600,
+                            ),
+                          ),
+                        ),
+                        Expanded(child: Divider(color: isDark ? Colors.white12 : Colors.grey.shade300)),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+
                     // Mode Switcher Tabs
                     Container(
                       padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
-                        color: Theme.of(context).brightness == Brightness.dark
-                            ? Colors.black26
-                            : Colors.grey.shade100,
+                        color: isDark ? Colors.black26 : Colors.grey.shade100,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Row(
@@ -154,7 +246,33 @@ class _AuthScreenState extends State<AuthScreen> {
                         ],
                       ),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 20),
+
+                    // Error Box
+                    if (_error != null) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.redAccent.withOpacity(0.4), width: 1),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                _error!,
+                                style: const TextStyle(color: Colors.redAccent, fontSize: 12, height: 1.3),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
 
                     // Inputs Based on Mode
                     if (_mode == _AuthMode.quickPin) ...[
@@ -169,23 +287,24 @@ class _AuthScreenState extends State<AuthScreen> {
                           letterSpacing: 8,
                           fontWeight: FontWeight.bold,
                         ),
-                        decoration: InputDecoration(
+                        decoration: const InputDecoration(
                           hintText: '••••',
                           labelText: 'رمز PIN المالك',
-                          errorText: _error,
+                          helperText: 'الرمز الافتراضي هو 1234',
                         ),
                         onSubmitted: (_) => _submitPin(),
                       ),
                       const SizedBox(height: 20),
                       SizedBox(
                         width: double.infinity,
+                        height: 46,
                         child: ElevatedButton(
                           onPressed: _isLoading ? null : _submitPin,
                           child: _isLoading
                               ? const SizedBox(
                                   height: 20,
                                   width: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                                 )
                               : const Text('دخول لوحة التحكم'),
                         ),
@@ -196,15 +315,17 @@ class _AuthScreenState extends State<AuthScreen> {
                         keyboardType: TextInputType.emailAddress,
                         decoration: const InputDecoration(
                           labelText: 'البريد الإلكتروني',
+                          hintText: 'name@example.com',
                           prefixIcon: Icon(Icons.email_outlined),
                         ),
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 14),
                       TextField(
                         controller: _passwordController,
                         obscureText: _obscurePassword,
                         decoration: InputDecoration(
                           labelText: 'كلمة المرور',
+                          hintText: '••••••••',
                           prefixIcon: const Icon(Icons.lock_outline),
                           suffixIcon: IconButton(
                             icon: Icon(
@@ -216,27 +337,20 @@ class _AuthScreenState extends State<AuthScreen> {
                         ),
                         onSubmitted: (_) => _submitEmailAuth(),
                       ),
-                      if (_error != null) ...[
-                        const SizedBox(height: 12),
-                        Text(
-                          _error!,
-                          style: const TextStyle(color: Colors.redAccent, fontSize: 12),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                      const SizedBox(height: 24),
+                      const SizedBox(height: 20),
                       SizedBox(
                         width: double.infinity,
+                        height: 46,
                         child: ElevatedButton(
                           onPressed: _isLoading ? null : _submitEmailAuth,
                           child: _isLoading
                               ? const SizedBox(
                                   height: 20,
                                   width: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                                 )
                               : Text(_mode == _AuthMode.signUp
-                                  ? 'إنشاء الحساب ومتابعة'
+                                  ? 'إنشاء حساب جديد'
                                   : 'تسجيل الدخول'),
                         ),
                       ),
@@ -246,6 +360,26 @@ class _AuthScreenState extends State<AuthScreen> {
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGoogleBadge() {
+    return Container(
+      width: 24,
+      height: 24,
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.white,
+      ),
+      alignment: Alignment.center,
+      child: const Text(
+        'G',
+        style: TextStyle(
+          color: Color(0xFF4285F4),
+          fontWeight: FontWeight.w900,
+          fontSize: 16,
         ),
       ),
     );

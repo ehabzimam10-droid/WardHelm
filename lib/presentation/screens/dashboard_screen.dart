@@ -11,11 +11,13 @@ import 'pairing_dialog.dart';
 class DashboardScreen extends StatelessWidget {
   final AppState appState;
   final DeviceState deviceState;
+  final VoidCallback? onLogout;
 
   const DashboardScreen({
     super.key,
     required this.appState,
     required this.deviceState,
+    this.onLogout,
   });
 
   void _openPairingDialog(BuildContext context) {
@@ -70,6 +72,11 @@ class DashboardScreen extends StatelessWidget {
             onPressed: () => appState.navigateTo(AppView.settings),
             icon: const Icon(Icons.settings_outlined),
             tooltip: 'الإعدادات',
+          ),
+          IconButton(
+            onPressed: () => onLogout != null ? onLogout!() : appState.lockDashboard(),
+            icon: const Icon(Icons.logout_rounded, color: AppColors.danger),
+            tooltip: 'تسجيل الخروج',
           ),
           const SizedBox(width: 8),
         ],
