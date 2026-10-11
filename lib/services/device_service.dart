@@ -17,13 +17,41 @@ class DeviceService {
   /// Claims a pairing code from the Controller Dashboard.
   /// Instantly pairs the device to the current owner and deletes the pairing code record.
   Future<DeviceModel?> claimPairingCode(String code, {String? customName, String? ownerId}) async {
-    final cleanCode = code.trim().toUpperCase();
-    final data = await _dal.getDocument('pairing_codes', cleanCode);
+    // 1. Normalize code: strip all spaces, convert to uppercase
+    String cleanCode = code.toUpperCase().replaceAll(RegExp(r'\s+'), '');
+
+    // Auto-fix missing prefix or dash
+    if (!cleanCode.startsWith('WH-') && cleanCode.startsWith('WH')) {
+      cleanCode = 'WH-${cleanCode.substring(2)}';
+    } else if (!cleanCode.startsWith('WH-') && cleanCode.length >= 6) {
+      cleanCode = 'WH-$cleanCode';
+    }
+
+    // Try finding code directly (bypass backoff for explicit user action)
+    var data = await _dal.getDocument('pairing_codes', cleanCode, bypassBackoff: true);
+    if (data == null && FirestoreDal.lastStatusCode == 429) {
+      await Future.delayed(const Duration(milliseconds: 1000));
+      data = await _dal.getDocument('pairing_codes', cleanCode, bypassBackoff: true);
+    }
+
+    // Fallback: search all active codes in case of dash placement differences
+    if (data == null) {
+      final allCodes = await _dal.getCollection('pairing_codes');
+      for (final c in allCodes) {
+        final raw = (c['code'] as String? ?? c['id'] as String? ?? '').toUpperCase().replaceAll(RegExp(r'\s+'), '');
+        if (raw == cleanCode || raw.replaceAll('-', '') == cleanCode.replaceAll('-', '')) {
+          data = c;
+          cleanCode = c['code'] as String? ?? c['id'] as String? ?? cleanCode;
+          break;
+        }
+      }
+    }
+
     if (data == null) return null;
 
     final pairingModel = PairingCodeModel.fromMap(data, cleanCode);
-    // Allow 30-second clock skew and transition grace window
-    final isExpired = DateTime.now().isAfter(pairingModel.expiresAt.add(const Duration(seconds: 30)));
+    // Allow 90-second clock skew and transition grace window
+    final isExpired = DateTime.now().isAfter(pairingModel.expiresAt.add(const Duration(seconds: 90)));
     if (isExpired) {
       // Clean up expired code
       await _dal.deleteDocument('pairing_codes', cleanCode);

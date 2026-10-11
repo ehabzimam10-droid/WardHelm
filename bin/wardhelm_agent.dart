@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io';
 import 'package:wardhelm/core/constants/app_constants.dart';
+import 'package:wardhelm/core/constants/app_logo_data.dart';
 import 'package:wardhelm/core/utils/system_info_helper.dart';
 import 'package:wardhelm/core/utils/totp_helper.dart';
 import 'package:wardhelm/data/models/pairing_code_model.dart';
@@ -139,11 +141,37 @@ $timer.Start()
 [System.Windows.Forms.Application]::Run()
 ''';
 
-/// Ensures Start Menu, Desktop shortcuts, and Auto-Startup registry are configured automatically on ANY machine
+/// Ensures permanent installation into %LOCALAPPDATA%\WardHelm, extracts icon, creates Start Menu/Desktop shortcuts, and configures auto-startup
 Future<void> _ensureSelfInstalled() async {
   if (!Platform.isWindows) return;
   try {
-    final exePath = Platform.resolvedExecutable;
+    final localAppData = Platform.environment['LOCALAPPDATA'] ?? r'C:\Users\Public';
+    final installDir = Directory('$localAppData\\WardHelm');
+    if (!installDir.existsSync()) {
+      installDir.createSync(recursive: true);
+    }
+    final permanentExe = File('${installDir.path}\\wardhelm_agent.exe');
+    final icoFile = File('${installDir.path}\\wardhelm_logo.ico');
+
+    // Extract icon file if missing or empty
+    if (!icoFile.existsSync() || icoFile.lengthSync() == 0) {
+      try {
+        icoFile.writeAsBytesSync(base64Decode(AppLogoData.logoIcoBase64));
+      } catch (_) {}
+    }
+
+    final currentExe = File(Platform.resolvedExecutable);
+
+    // If running from outside the permanent install folder, copy executable over
+    if (currentExe.path.toLowerCase() != permanentExe.path.toLowerCase()) {
+      try {
+        currentExe.copySync(permanentExe.path);
+      } catch (_) {}
+    }
+
+    final targetPath = permanentExe.existsSync() ? permanentExe.path : currentExe.path;
+    final iconPath = icoFile.existsSync() ? icoFile.path : targetPath;
+
     await Process.run('powershell.exe', [
       '-NoProfile',
       '-Command',
@@ -153,25 +181,25 @@ Future<void> _ensureSelfInstalled() async {
       \$startMenu = "\$appData\\Microsoft\\Windows\\Start Menu\\Programs\\WardHelm.lnk"
       \$desktop = [Environment]::GetFolderPath('Desktop') + "\\WardHelm.lnk"
 
-      if (-not (Test-Path \$startMenu)) {
-        try {
-          \$s1 = \$WshShell.CreateShortcut(\$startMenu)
-          \$s1.TargetPath = "$exePath"
-          \$s1.Description = "WardHelm Autonomous Cloud Guardian"
-          \$s1.Save()
-        } catch {}
-      }
+      try {
+        \$s1 = \$WshShell.CreateShortcut(\$startMenu)
+        \$s1.TargetPath = "$targetPath"
+        \$s1.WorkingDirectory = "${installDir.path}"
+        \$s1.IconLocation = "$iconPath,0"
+        \$s1.Description = "WardHelm Autonomous Cloud Guardian"
+        \$s1.Save()
+      } catch {}
 
-      if (-not (Test-Path \$desktop)) {
-        try {
-          \$s2 = \$WshShell.CreateShortcut(\$desktop)
-          \$s2.TargetPath = "$exePath"
-          \$s2.Description = "WardHelm Autonomous Cloud Guardian"
-          \$s2.Save()
-        } catch {}
-      }
+      try {
+        \$s2 = \$WshShell.CreateShortcut(\$desktop)
+        \$s2.TargetPath = "$targetPath"
+        \$s2.WorkingDirectory = "${installDir.path}"
+        \$s2.IconLocation = "$iconPath,0"
+        \$s2.Description = "WardHelm Autonomous Cloud Guardian"
+        \$s2.Save()
+      } catch {}
 
-      Set-ItemProperty -Path "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" -Name "WardHelm" -Value '"$exePath"' -ErrorAction SilentlyContinue
+      Set-ItemProperty -Path "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" -Name "WardHelm" -Value '"$targetPath"' -ErrorAction SilentlyContinue
       '''
     ]);
   } catch (_) {}
@@ -181,9 +209,10 @@ Future<void> _ensureSelfInstalled() async {
 void _startSystemTrayIcon() {
   if (!Platform.isWindows) return;
   try {
-    final exeDir = File(Platform.resolvedExecutable).parent.path;
-    var trayScript = '$exeDir\\wardhelm_tray.ps1';
-    var iconPath = '$exeDir\\assets\\app_icon.ico';
+    final localAppData = Platform.environment['LOCALAPPDATA'] ?? r'C:\Users\Public';
+    final installDir = '$localAppData\\WardHelm';
+    var trayScript = '$installDir\\wardhelm_tray.ps1';
+    var iconPath = '$installDir\\wardhelm_logo.ico';
 
     if (!File(trayScript).existsSync()) {
       final fallbackDir = Directory.systemTemp.path;
@@ -279,7 +308,6 @@ void main(List<String> args) async {
         final openReq = await client.postUrl(Uri.parse('http://127.0.0.1:48123/open_gui'));
         await openReq.close();
       } catch (_) {}
-      AgentGuiServer().launchWindow();
       exit(0);
     }
   } catch (_) {}
@@ -421,8 +449,9 @@ void main(List<String> args) async {
     }
   });
 
-  // Main 5-second agent sync loop
-  Timer.periodic(const Duration(seconds: 5), (_) async {
+  // Main 8-second agent sync loop
+  int agentHeartbeatCounter = 0;
+  Timer.periodic(const Duration(seconds: 8), (_) async {
     if (isUpdating) return;
 
     try {
@@ -439,12 +468,14 @@ void main(List<String> args) async {
         guiServer.mode = dev.mode;
         guiServer.isControlled = dev.isControlledMode;
 
-        // Heartbeat with version stamp
-        await deviceService.sendHeartbeatDirect(
-          deviceId,
-          dev,
-          currentVersion: AppConstants.appVersion,
-        );
+        // Heartbeat with version stamp (throttled to every 24s)
+        if (agentHeartbeatCounter++ % 3 == 0) {
+          await deviceService.sendHeartbeatDirect(
+            deviceId,
+            dev,
+            currentVersion: AppConstants.appVersion,
+          );
+        }
       } else {
         // Device record is null in Firestore!
         // If it was paired, it has been unpaired/wiped from the cloud!

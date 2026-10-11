@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../data/models/session_model.dart';
 import '../data/models/security_log_model.dart';
+import '../data/dal/firestore_dal.dart';
 import '../services/session_service.dart';
 
 /// Manages active session controls and live actions
@@ -25,7 +26,8 @@ class SessionState extends ChangeNotifier {
     loadSession(sessionId);
     loadLogs(deviceId);
     _syncTimer?.cancel();
-    _syncTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+    _syncTimer = Timer.periodic(const Duration(seconds: 8), (_) {
+      if (FirestoreDal.isRateLimited) return;
       loadSession(sessionId, silent: true);
       loadLogs(deviceId, silent: true);
     });

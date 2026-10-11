@@ -20,8 +20,26 @@ class AuthService {
       : _prefs = prefs,
         _client = client ?? http.Client();
 
+  void initTokenListener() {
+    if (kIsWeb) {
+      try {
+        FirebaseAuth.instance.idTokenChanges().listen((user) async {
+          if (user != null) {
+            final token = await user.getIdToken();
+            if (token != null) {
+              FirestoreDal.authToken = token;
+              final prefs = _prefs ?? await SharedPreferences.getInstance();
+              await prefs.setString(_idTokenKey, token);
+            }
+          }
+        });
+      } catch (_) {}
+    }
+  }
+
   /// Check if user has an active authenticated session
   Future<bool> isAuthenticated() async {
+    initTokenListener();
     if (kIsWeb) {
       try {
         final currentUser = FirebaseAuth.instance.currentUser;

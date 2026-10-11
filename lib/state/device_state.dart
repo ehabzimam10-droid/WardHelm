@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../data/models/device_model.dart';
+import '../data/dal/firestore_dal.dart';
 import '../services/auth_service.dart';
 import '../services/device_service.dart';
 
@@ -27,7 +28,10 @@ class DeviceState extends ChangeNotifier {
   void startPolling() {
     refreshDevices();
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 4), (_) => refreshDevices(silent: true));
+    _pollTimer = Timer.periodic(const Duration(seconds: 8), (_) {
+      if (FirestoreDal.isRateLimited) return;
+      refreshDevices(silent: true);
+    });
   }
 
   void stopPolling() {
@@ -39,6 +43,7 @@ class DeviceState extends ChangeNotifier {
   }
 
   Future<void> refreshDevices({bool silent = false}) async {
+    if (FirestoreDal.isRateLimited && silent) return;
     if (!silent) {
       _isLoading = true;
       notifyListeners();

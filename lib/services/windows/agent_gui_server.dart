@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'dart:io';
 import '../../core/constants/app_constants.dart';
+import '../../core/constants/app_logo_data.dart';
 
 /// Embedded local GUI web server and window launcher for WardHelm Windows Agent
 class AgentGuiServer {
   final int port;
   HttpServer? _server;
+  bool _isWindowOpen = false;
 
   String currentCode = '';
   int remainingSeconds = 60;
@@ -29,6 +31,13 @@ class AgentGuiServer {
 
       _server!.listen((HttpRequest request) async {
         final path = request.uri.path;
+
+        if (path == '/logo.png') {
+          request.response.headers.contentType = ContentType('image', 'png');
+          request.response.add(base64Decode(AppLogoData.logoPngBase64));
+          await request.response.close();
+          return;
+        }
 
         if (path == '/status') {
           request.response.headers.contentType = ContentType.json;
@@ -84,6 +93,24 @@ class AgentGuiServer {
   }
 
   void launchWindow() {
+    if (_isWindowOpen) {
+      // Bring existing window to front via PowerShell
+      try {
+        Process.runSync('powershell.exe', [
+          '-NoProfile',
+          '-Command',
+          r'''
+          $w = (Get-Process | Where-Object { $_.MainWindowTitle -like "*WardHelm*" } | Select-Object -First 1)
+          if ($w) {
+            $ws = New-Object -ComObject WScript.Shell
+            $ws.AppActivate($w.Id)
+          }
+          '''
+        ]);
+        return;
+      } catch (_) {}
+    }
+
     final edgePaths = [
       r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe',
       r'C:\Program Files\Microsoft\Edge\Application\msedge.exe',
@@ -103,6 +130,7 @@ class AgentGuiServer {
             ],
             mode: ProcessStartMode.detached,
           );
+          _isWindowOpen = true;
           stdout.writeln('[GUI] Opened native application window via $path');
           return;
         } catch (_) {}
@@ -112,6 +140,7 @@ class AgentGuiServer {
     // Fallback: Default browser
     try {
       Process.start('cmd.exe', ['/c', 'start', 'http://127.0.0.1:$port'], mode: ProcessStartMode.detached);
+      _isWindowOpen = true;
     } catch (_) {}
   }
 
@@ -122,6 +151,7 @@ class AgentGuiServer {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>WardHelm - حارس الحاسوب الذكي</title>
+  <link rel="icon" type="image/png" href="/logo.png">
   <style>
     :root {
       --bg: #0d1117;
@@ -299,11 +329,7 @@ class AgentGuiServer {
 
 <div class="container">
   <div class="header">
-    <div class="shield-badge">
-      <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor">
-        <path d="M12 2L4 5V11.09C4 16.14 7.41 20.85 12 22C16.59 20.85 20 16.14 20 11.09V5L12 2ZM12 4.15L18 6.4V11.09C18 15.08 15.45 18.79 12 19.82C8.55 18.79 6 15.08 6 11.09V6.4L12 4.15Z"/>
-      </svg>
-    </div>
+    <img src="/logo.png" width="76" height="76" alt="WardHelm Logo" style="margin-bottom: 12px; filter: drop-shadow(0 6px 18px rgba(96, 165, 250, 0.45)); object-fit: contain;">
     <h1>WardHelm</h1>
     <div class="subtitle" id="subTitle">حارس الحاسوب الذكي وإدارة الجلسات</div>
   </div>

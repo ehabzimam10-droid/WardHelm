@@ -11,6 +11,15 @@ class FirestoreDal {
   FirestoreDal({http.Client? client}) : _client = client ?? http.Client();
 
   static String? authToken;
+  static int lastStatusCode = 200;
+  static DateTime? _rateLimitedUntil;
+
+  // Short in-memory cache to prevent redundant concurrent queries
+  static final Map<String, List<Map<String, dynamic>>> _collectionCache = {};
+  static final Map<String, DateTime> _cacheTime = {};
+
+  static bool get isRateLimited =>
+      _rateLimitedUntil != null && DateTime.now().isBefore(_rateLimitedUntil!);
 
   String get _baseUrl => FirebaseConfig.firestoreRestUrl;
   String get _apiKeyParam => '?key=${FirebaseConfig.apiKey}';
@@ -26,11 +35,25 @@ class FirestoreDal {
     return headers;
   }
 
+  void _handleStatusCode(int code) {
+    lastStatusCode = code;
+    if (code == 429) {
+      _rateLimitedUntil = DateTime.now().add(const Duration(seconds: 12));
+    } else if (code == 200 || code == 201 || code == 204) {
+      if (isRateLimited) _rateLimitedUntil = null;
+    }
+  }
+
   /// Fetch a single document
-  Future<Map<String, dynamic>?> getDocument(String collection, String docId) async {
+  Future<Map<String, dynamic>?> getDocument(String collection, String docId, {bool bypassBackoff = false}) async {
+    if (isRateLimited && !bypassBackoff) {
+      return null;
+    }
+
     final uri = Uri.parse('$_baseUrl/$collection/$docId$_apiKeyParam');
     try {
       final response = await _client.get(uri, headers: _headers());
+      _handleStatusCode(response.statusCode);
       if (response.statusCode == 200) {
         final decoded = json.decode(response.body) as Map<String, dynamic>;
         return _decodeFirestoreFields(decoded['fields'] as Map<String, dynamic>? ?? {});
@@ -41,15 +64,32 @@ class FirestoreDal {
     }
   }
 
-  /// List all documents in a collection
+  /// List all documents in a collection with intelligent caching and backoff
   Future<List<Map<String, dynamic>>> getCollection(String collection) async {
+    final now = DateTime.now();
+
+    // Serve from cache if requested recently (within 4 seconds)
+    final lastTime = _cacheTime[collection];
+    if (lastTime != null && now.difference(lastTime).inSeconds < 4) {
+      final cached = _collectionCache[collection];
+      if (cached != null) return List.from(cached);
+    }
+
+    // If rate-limited, return cached data without hitting API
+    if (isRateLimited) {
+      final cached = _collectionCache[collection];
+      if (cached != null) return List.from(cached);
+      return [];
+    }
+
     final uri = Uri.parse('$_baseUrl/$collection$_apiKeyParam');
     try {
       final response = await _client.get(uri, headers: _headers());
+      _handleStatusCode(response.statusCode);
       if (response.statusCode == 200) {
         final decoded = json.decode(response.body) as Map<String, dynamic>;
         final documents = decoded['documents'] as List<dynamic>? ?? [];
-        return documents.map((doc) {
+        final list = documents.map((doc) {
           final fields = (doc as Map<String, dynamic>)['fields'] as Map<String, dynamic>? ?? {};
           final name = doc['name'] as String? ?? '';
           final docId = name.split('/').last;
@@ -57,9 +97,18 @@ class FirestoreDal {
           map['id'] = docId;
           return map;
         }).toList();
+
+        _collectionCache[collection] = list;
+        _cacheTime[collection] = now;
+        return list;
       }
+      // Return cached fallback if available
+      final fallback = _collectionCache[collection];
+      if (fallback != null) return List.from(fallback);
       return [];
     } catch (_) {
+      final fallback = _collectionCache[collection];
+      if (fallback != null) return List.from(fallback);
       return [];
     }
   }
@@ -77,7 +126,13 @@ class FirestoreDal {
         headers: _headers(),
         body: body,
       );
-      return response.statusCode == 200 || response.statusCode == 201;
+      _handleStatusCode(response.statusCode);
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        // Invalidate cache for this collection
+        _cacheTime.remove(collection);
+        return true;
+      }
+      return false;
     } catch (_) {
       return false;
     }
@@ -88,7 +143,12 @@ class FirestoreDal {
     final uri = Uri.parse('$_baseUrl/$collection/$docId$_apiKeyParam');
     try {
       final response = await _client.delete(uri, headers: _headers());
-      return response.statusCode == 200 || response.statusCode == 204;
+      _handleStatusCode(response.statusCode);
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        _cacheTime.remove(collection);
+        return true;
+      }
+      return false;
     } catch (_) {
       return false;
     }
