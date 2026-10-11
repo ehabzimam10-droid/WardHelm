@@ -33,6 +33,15 @@ class DeviceModel {
     return isOnline && diff.inSeconds <= 90;
   }
 
+  /// List of installed applications discovered and reported by the PC agent
+  List<String> get installedApps {
+    final apps = metadata['installedApps'];
+    if (apps is List) {
+      return apps.map((e) => e.toString()).toList();
+    }
+    return [];
+  }
+
   DeviceModel copyWith({
     String? id,
     String? name,

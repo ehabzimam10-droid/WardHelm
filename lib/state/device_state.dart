@@ -71,6 +71,11 @@ class DeviceState extends ChangeNotifier {
     notifyListeners();
   }
 
+  void deselectDevice() {
+    _selectedDevice = null;
+    notifyListeners();
+  }
+
   /// Claims pairing code and assigns device to the authenticated user
   Future<bool> pairDevice(String code, {String? customName}) async {
     _isLoading = true;

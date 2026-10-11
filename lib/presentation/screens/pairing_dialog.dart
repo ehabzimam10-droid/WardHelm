@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/localization/app_localizations.dart';
 import '../../state/device_state.dart';
 
 /// Modal dialog to input and claim a 60s dynamic pairing code
@@ -18,10 +19,10 @@ class _PairingDialogState extends State<PairingDialog> {
   bool _isSubmitting = false;
   String? _error;
 
-  Future<void> _submit() async {
+  Future<void> _submit(AppLocalizations loc) async {
     final code = _codeController.text.trim();
     if (code.isEmpty) {
-      setState(() => _error = 'يرجى إدخال رمز الربط الظاهر على شاشة الحاسوب');
+      setState(() => _error = loc.enterCode);
       return;
     }
 
@@ -32,7 +33,7 @@ class _PairingDialogState extends State<PairingDialog> {
 
     final success = await widget.deviceState.pairDevice(
       code,
-      customName: _nameController.text.trim(),
+      customName: _nameController.text.trim().isNotEmpty ? _nameController.text.trim() : null,
     );
 
     if (mounted) {
@@ -40,14 +41,14 @@ class _PairingDialogState extends State<PairingDialog> {
       if (success) {
         Navigator.of(context).pop(true);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('تم ربط الحاسوب بنجاح!'),
+          SnackBar(
+            content: Text(loc.successPairing),
             backgroundColor: AppColors.success,
           ),
         );
       } else {
         setState(() {
-          _error = widget.deviceState.errorMessage ?? 'رمز الربط غير صالح أو انتهت صلاحيته (60 ثانية)';
+          _error = widget.deviceState.errorMessage ?? loc.invalidCode;
         });
       }
     }
@@ -55,6 +56,10 @@ class _PairingDialogState extends State<PairingDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isRtl = Directionality.of(context) == TextDirection.rtl;
+    final loc = AppLocalizations(isArabic: isRtl);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: ConstrainedBox(
@@ -76,16 +81,19 @@ class _PairingDialogState extends State<PairingDialog> {
                     child: const Icon(Icons.qr_code_rounded, color: AppColors.primary, size: 24),
                   ),
                   const SizedBox(width: 12),
-                  const Text(
-                    'ربط جهاز حاسوب جديد',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  Text(
+                    loc.pairingModalTitle,
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
                 ],
               ),
               const SizedBox(height: 16),
-              const Text(
-                'شغّل WardHelm على الحاسوب وأدخل الرمز الديناميكي الظاهر على الشاشة:',
-                style: TextStyle(fontSize: 13, color: AppColors.darkTextMuted),
+              Text(
+                loc.pairingModalDesc,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                ),
               ),
               const SizedBox(height: 16),
               TextField(
@@ -98,14 +106,16 @@ class _PairingDialogState extends State<PairingDialog> {
                   errorText: _error,
                   prefixIcon: const Icon(Icons.key_rounded),
                 ),
+                onSubmitted: (_) => _submit(loc),
               ),
               const SizedBox(height: 12),
               TextField(
                 controller: _nameController,
-                decoration: const InputDecoration(
-                  hintText: 'تسمية الجهاز (اختياري: مثلاً بي سي الألعاب)',
-                  prefixIcon: Icon(Icons.edit_note_rounded),
+                decoration: InputDecoration(
+                  hintText: loc.customNameOptional,
+                  prefixIcon: const Icon(Icons.edit_note_rounded),
                 ),
+                onSubmitted: (_) => _submit(loc),
               ),
               const SizedBox(height: 24),
               Row(
@@ -113,18 +123,18 @@ class _PairingDialogState extends State<PairingDialog> {
                 children: [
                   TextButton(
                     onPressed: () => Navigator.of(context).pop(false),
-                    child: const Text('إلغاء'),
+                    child: Text(loc.cancel),
                   ),
                   const SizedBox(width: 8),
                   ElevatedButton(
-                    onPressed: _isSubmitting ? null : _submit,
+                    onPressed: _isSubmitting ? null : () => _submit(loc),
                     child: _isSubmitting
                         ? const SizedBox(
                             width: 18,
                             height: 18,
                             child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                           )
-                        : const Text('ربط الجهاز فوراً'),
+                        : Text(loc.pairButton),
                   ),
                 ],
               ),

@@ -17,6 +17,16 @@ class DeviceCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final isOnline = device.isActivelyOnline;
     final isOwner = device.isOwnerMode;
+    final isRtl = Directionality.of(context) == TextDirection.rtl;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    final onlineText = isRtl
+        ? (isOnline ? "متصل الآن" : "غير متصل")
+        : (isOnline ? "Online Now" : "Offline");
+
+    final modeBadgeText = isRtl
+        ? (isOwner ? "وضع المالك الحر" : "جلسة مقيدة")
+        : (isOwner ? "Owner Mode" : "Controlled Session");
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
@@ -34,12 +44,12 @@ class DeviceCard extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: isOnline
                       ? AppColors.success.withOpacity(0.12)
-                      : AppColors.darkBorder.withOpacity(0.4),
+                      : (isDark ? AppColors.darkBorder.withOpacity(0.4) : AppColors.lightBorder),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
                   Icons.desktop_windows_rounded,
-                  color: isOnline ? AppColors.success : AppColors.darkTextMuted,
+                  color: isOnline ? AppColors.success : (isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted),
                   size: 24,
                 ),
               ),
@@ -52,11 +62,15 @@ class DeviceCard extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        Text(
-                          device.name,
-                          style: const TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w700,
+                        Flexible(
+                          child: Text(
+                            device.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -72,10 +86,10 @@ class DeviceCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '${device.os} • ${isOnline ? "متصل الآن" : "غير متصل"}',
-                      style: const TextStyle(
+                      '${device.os} • $onlineText',
+                      style: TextStyle(
                         fontSize: 12,
-                        color: AppColors.darkTextMuted,
+                        color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
                       ),
                     ),
                   ],
@@ -98,7 +112,7 @@ class DeviceCard extends StatelessWidget {
                   ),
                 ),
                 child: Text(
-                  isOwner ? 'وضع المالك الحر' : 'جلسة مقيدة',
+                  modeBadgeText,
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -107,7 +121,10 @@ class DeviceCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              const Icon(Icons.chevron_left_rounded, color: AppColors.darkTextMuted),
+              Icon(
+                isRtl ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
+                color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+              ),
             ],
           ),
         ),

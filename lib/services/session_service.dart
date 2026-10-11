@@ -16,7 +16,9 @@ class SessionService {
   Future<SessionModel?> startSession({
     required String deviceId,
     required int durationMinutes,
-    required List<String> allowedApps,
+    List<String> allowedApps = const [],
+    String filterMode = 'whitelist',
+    List<String> blockedApps = const [],
   }) async {
     final sessionId = 'sess_${DateTime.now().millisecondsSinceEpoch}';
     final session = SessionModel(
@@ -26,6 +28,8 @@ class SessionService {
       durationMinutes: durationMinutes,
       remainingMinutes: durationMinutes,
       allowedApps: allowedApps,
+      filterMode: filterMode,
+      blockedApps: blockedApps,
       status: 'active',
     );
 
@@ -36,10 +40,12 @@ class SessionService {
     await _deviceService.setDeviceMode(deviceId, 'controlled', activeSessionId: sessionId);
 
     // Audit log
+    final appCount = filterMode == 'whitelist' ? allowedApps.length : blockedApps.length;
+    final modeLabel = filterMode == 'whitelist' ? 'whitelisted' : 'blacklisted';
     await logSecurityEvent(
       deviceId,
       'session_start',
-      'Started $durationMinutes min controlled session with ${allowedApps.length} whitelisted apps',
+      'Started $durationMinutes min controlled session ($filterMode) with $appCount $modeLabel apps',
     );
 
     return session;

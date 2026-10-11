@@ -19,9 +19,11 @@ class AgentKioskScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final loc = appState.loc;
     final isPaired = agentController.isPaired;
     final session = agentController.activeSession;
     final isLocked = agentController.isKioskLocked;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     // Full Screen Prayer Pause Lock Screen
     if (isLocked) {
@@ -44,9 +46,9 @@ class AgentKioskScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 24),
-              const Text(
-                'استراحة الصلاة',
-                style: TextStyle(
+              Text(
+                loc.prayerPause,
+                style: const TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.w800,
                   color: Colors.white,
@@ -54,9 +56,11 @@ class AgentKioskScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 12),
-              const Text(
-                'تم قفل الشاشة مؤقتاً لأداء الصلاة • تم إيقاف عداد الوقت وسيُستأنف لاحقاً',
-                style: TextStyle(fontSize: 16, color: Colors.white70),
+              Text(
+                appState.isArabic
+                    ? 'تم قفل الشاشة مؤقتاً لأداء الصلاة • تم إيقاف عداد الوقت وسيُستأنف لاحقاً'
+                    : 'Screen is locked for prayer pause • Countdown timer is paused',
+                style: const TextStyle(fontSize: 16, color: Colors.white70),
               ),
             ],
           ),
@@ -66,33 +70,51 @@ class AgentKioskScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('WardHelm PC Agent'),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Image.asset(
+              'assets/wardhelm_logo.png',
+              width: 26,
+              height: 26,
+              errorBuilder: (_, _, _) => const Icon(Icons.shield_rounded, color: AppColors.primary),
+            ),
+            const SizedBox(width: 10),
+            Text('${loc.appTitle} PC Agent', style: const TextStyle(fontWeight: FontWeight.bold)),
+          ],
+        ),
         actions: [
           IconButton(
             onPressed: () async {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('جارٍ فحص التحديثات للوكيل...')),
+                SnackBar(content: Text(appState.isArabic ? 'جارٍ فحص التحديثات للوكيل...' : 'Checking agent updates...')),
               );
               final info = await AutoUpdaterService().checkForUpdates();
               if (!context.mounted) return;
               showDialog(
                 context: context,
                 builder: (ctx) => AlertDialog(
-                  title: Text(info.hasUpdate ? 'يتوفر تحديث جديد: v${info.latestVersion}' : 'الوكيل يعمل على أحدث إصدار (v${info.currentVersion})'),
-                  content: Text(info.hasUpdate ? info.releaseNotes : 'ملفات الوكيل محدثة وتتزامن ذاتياً مع السحابة.'),
+                  title: Text(info.hasUpdate
+                      ? '${loc.updateAvailable}: v${info.latestVersion}'
+                      : '${loc.upToDate} (v${info.currentVersion})'),
+                  content: Text(info.hasUpdate
+                      ? info.releaseNotes
+                      : (appState.isArabic
+                          ? 'ملفات الوكيل محدثة وتتزامن ذاتياً مع السحابة.'
+                          : 'Agent binaries are up to date and cloud synced.')),
                   actions: [
-                    TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('إغلاق')),
+                    TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text(loc.cancel)),
                   ],
                 ),
               );
             },
             icon: const Icon(Icons.system_update_rounded),
-            tooltip: 'فحص التحديثات',
+            tooltip: loc.checkUpdates,
           ),
           TextButton.icon(
             onPressed: () => appState.navigateTo(AppView.dashboard),
             icon: const Icon(Icons.dashboard_rounded, size: 18),
-            label: const Text('لوحة التحكم'),
+            label: Text(loc.dashboard),
           ),
           const SizedBox(width: 8),
         ],
@@ -110,15 +132,18 @@ class AgentKioskScreen extends StatelessWidget {
                   children: [
                     if (!isPaired) ...[
                       // Dynamic 60s Pairing Screen
-                      const Text(
-                        'ربط هذا الحاسوب بحسابك',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                      Text(
+                        loc.pairingTitle,
+                        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
                       ),
                       const SizedBox(height: 6),
-                      const Text(
-                        'أدخل الرمز التالي في جوالك أو لوحة التحكم لربط الجهاز فوراً:',
+                      Text(
+                        loc.pairingDesc,
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 13, color: AppColors.darkTextMuted),
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                        ),
                       ),
                       const SizedBox(height: 28),
                       CircularTotpTimer(
@@ -139,9 +164,9 @@ class AgentKioskScreen extends StatelessWidget {
                             ),
                           ),
                           const SizedBox(width: 8),
-                          const Text(
-                            'جلسة لعب مقيدة نشطة',
-                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                          Text(
+                            loc.controlledMode,
+                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
@@ -159,14 +184,16 @@ class AgentKioskScreen extends StatelessWidget {
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(color: AppColors.danger.withOpacity(0.3)),
                           ),
-                          child: const Row(
+                          child: Row(
                             children: [
-                              Icon(Icons.wifi_off_rounded, color: AppColors.danger, size: 20),
-                              SizedBox(width: 10),
+                              const Icon(Icons.wifi_off_rounded, color: AppColors.danger, size: 20),
+                              const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
-                                  'تم قطع الإنترنت عن الألعاب والمتصفحات مؤقتاً',
-                                  style: TextStyle(fontSize: 12, color: AppColors.danger),
+                                  appState.isArabic
+                                      ? 'تم قطع الإنترنت عن الألعاب والمتصفحات مؤقتاً'
+                                      : 'Internet access is restricted for games & browsers',
+                                  style: const TextStyle(fontSize: 12, color: AppColors.danger),
                                 ),
                               ),
                             ],
@@ -174,21 +201,32 @@ class AgentKioskScreen extends StatelessWidget {
                         ),
                       const SizedBox(height: 16),
                       Text(
-                        'البرامج المسموحة: ${session.allowedApps.join(", ")}',
-                        style: const TextStyle(fontSize: 12, color: AppColors.darkTextMuted),
+                        session.isWhitelistMode
+                            ? '${loc.allowedApps}: ${session.allowedApps.join(", ")}'
+                            : '${loc.blockedApps}: ${session.blockedApps.join(", ")}',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                        ),
                       ),
                     ] else ...[
                       // Linked in Owner Mode
-                      Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: AppColors.success.withOpacity(0.12),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.verified_user_rounded,
-                          color: AppColors.success,
-                          size: 48,
+                      Image.asset(
+                        'assets/wardhelm_logo.png',
+                        width: 72,
+                        height: 72,
+                        errorBuilder: (_, _, _) => Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AppColors.success.withOpacity(0.12),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.verified_user_rounded,
+                            color: AppColors.success,
+                            size: 48,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 20),
@@ -197,19 +235,22 @@ class AgentKioskScreen extends StatelessWidget {
                         style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
                       ),
                       const SizedBox(height: 6),
-                      const Text(
-                        'وضع المالك الحر (Unrestricted Owner Mode)',
-                        style: TextStyle(
+                      Text(
+                        loc.ownerMode,
+                        style: const TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.w600,
                           color: AppColors.success,
                         ),
                       ),
                       const SizedBox(height: 12),
-                      const Text(
-                        'هذا الحاسوب غير مقيد حالياً. يمكنك تفعيل جلسة للأخ من خلال لوحة التحكم في الجوال عند الطلب.',
+                      Text(
+                        loc.ownerModeDesc,
                         textAlign: TextAlign.center,
-                        style: TextStyle(fontSize: 13, color: AppColors.darkTextMuted),
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                        ),
                       ),
                     ],
                   ],

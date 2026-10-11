@@ -5,22 +5,30 @@ import '../../core/utils/native_io/native_io.dart';
 typedef OnProcessTerminatedCallback = void Function(String processName);
 
 /// Process watchdog that inspects active tasks and terminates unauthorized apps
+/// Supports dual modes: Whitelist (kill anything not permitted) and Blacklist (kill specifically blocked apps).
 class ProcessWatchdogService {
   Timer? _timer;
   bool _isRunning = false;
+  String _filterMode = 'whitelist'; // 'whitelist' or 'blacklist'
   List<String> _allowedApps = [];
+  List<String> _blockedApps = [];
   OnProcessTerminatedCallback? onProcessTerminated;
 
   bool get isRunning => _isRunning;
+  String get filterMode => _filterMode;
 
-  /// Starts the periodic watchdog loop (e.g. every 2 seconds)
+  /// Starts the periodic watchdog loop (every 2 seconds)
   void startWatchdog({
-    required List<String> allowedApps,
+    List<String> allowedApps = const [],
+    String filterMode = 'whitelist',
+    List<String> blockedApps = const [],
     OnProcessTerminatedCallback? onTerminated,
   }) {
     if (!NativeIo.isWindows) return;
 
+    _filterMode = filterMode;
     _allowedApps = allowedApps.map((e) => e.trim().toLowerCase()).toList();
+    _blockedApps = blockedApps.map((e) => e.trim().toLowerCase()).toList();
     onProcessTerminated = onTerminated;
     _isRunning = true;
 
@@ -35,9 +43,24 @@ class ProcessWatchdogService {
     _isRunning = false;
   }
 
-  /// Updates current whitelist dynamically
+  /// Updates current policy dynamically during an active session
+  void updatePolicy({
+    List<String>? allowedApps,
+    String? filterMode,
+    List<String>? blockedApps,
+  }) {
+    if (filterMode != null) _filterMode = filterMode;
+    if (allowedApps != null) {
+      _allowedApps = allowedApps.map((e) => e.trim().toLowerCase()).toList();
+    }
+    if (blockedApps != null) {
+      _blockedApps = blockedApps.map((e) => e.trim().toLowerCase()).toList();
+    }
+  }
+
+  /// Backwards-compatible whitelist updater
   void updateAllowedApps(List<String> allowedApps) {
-    _allowedApps = allowedApps.map((e) => e.trim().toLowerCase()).toList();
+    updatePolicy(allowedApps: allowedApps, filterMode: 'whitelist');
   }
 
   /// Performs scan of current running tasks
@@ -59,7 +82,7 @@ class ProcessWatchdogService {
 
       for (final line in lines) {
         if (line.trim().isEmpty) continue;
-        
+
         final fields = RegExp(r'"([^"]*)"')
             .allMatches(line)
             .map((m) => m.group(1) ?? '')
@@ -82,19 +105,34 @@ class ProcessWatchdogService {
         // Never terminate protected system or WardHelm processes
         if (AppConstants.protectedSystemProcesses.contains(rawExe)) continue;
 
-        // Check if application is in the allowed whitelist
-        final isWhitelisted = _allowedApps.any((app) {
-          final normalizedApp = app.toLowerCase().trim();
-          final baseName = normalizedApp.replaceAll('.exe', '');
-          return rawExe == normalizedApp ||
-              rawExe == '$baseName.exe' ||
-              rawExe.startsWith(baseName);
-        });
+        if (_filterMode == 'whitelist') {
+          // Whitelist Mode: Terminate if NOT explicitly allowed
+          final isWhitelisted = _allowedApps.any((app) {
+            final normalizedApp = app.toLowerCase().trim();
+            final baseName = normalizedApp.replaceAll('.exe', '');
+            return rawExe == normalizedApp ||
+                rawExe == '$baseName.exe' ||
+                rawExe.startsWith(baseName);
+          });
 
-        // Kill unauthorized application once per scan cycle
-        if (!isWhitelisted && !killedThisCycle.contains(rawExe)) {
-          killedThisCycle.add(rawExe);
-          await _killProcess(rawExe);
+          if (!isWhitelisted && !killedThisCycle.contains(rawExe)) {
+            killedThisCycle.add(rawExe);
+            await _killProcess(rawExe);
+          }
+        } else {
+          // Blacklist Mode: Terminate if specifically present in blocked list
+          final isBlacklisted = _blockedApps.any((app) {
+            final normalizedApp = app.toLowerCase().trim();
+            final baseName = normalizedApp.replaceAll('.exe', '');
+            return rawExe == normalizedApp ||
+                rawExe == '$baseName.exe' ||
+                rawExe.startsWith(baseName);
+          });
+
+          if (isBlacklisted && !killedThisCycle.contains(rawExe)) {
+            killedThisCycle.add(rawExe);
+            await _killProcess(rawExe);
+          }
         }
       }
     } catch (_) {}

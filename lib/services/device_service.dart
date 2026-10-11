@@ -101,6 +101,14 @@ class DeviceService {
     return await _dal.setDocument('devices', deviceId, updated.toMap());
   }
 
+  /// Updates discovered installed applications on the device
+  Future<bool> updateDeviceInstalledApps(String deviceId, DeviceModel existing, List<String> apps) async {
+    final updatedMetadata = Map<String, dynamic>.from(existing.metadata);
+    updatedMetadata['installedApps'] = apps;
+    final updated = existing.copyWith(metadata: updatedMetadata);
+    return await _dal.setDocument('devices', deviceId, updated.toMap());
+  }
+
   /// Updates heartbeat and online status
   Future<bool> sendHeartbeat(String deviceId) async {
     final existing = await getDevice(deviceId);

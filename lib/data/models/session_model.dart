@@ -9,6 +9,8 @@ class SessionModel {
   final bool isPrayerPause;
   final bool isInternetBlocked;
   final List<String> allowedApps;
+  final String filterMode; // 'whitelist' or 'blacklist'
+  final List<String> blockedApps; // Apps explicitly terminated if launched in blacklist mode
   final String status; // 'active', 'completed', 'cancelled'
   final DateTime? endedAt;
   final int totalPausedSeconds;
@@ -24,6 +26,8 @@ class SessionModel {
     this.isPrayerPause = false,
     this.isInternetBlocked = false,
     this.allowedApps = const [],
+    this.filterMode = 'whitelist',
+    this.blockedApps = const [],
     this.status = 'active',
     this.endedAt,
     this.totalPausedSeconds = 0,
@@ -33,6 +37,8 @@ class SessionModel {
   bool get isActive => status == 'active';
   bool get isCompleted => status == 'completed';
   bool get isCancelled => status == 'cancelled';
+  bool get isWhitelistMode => filterMode == 'whitelist';
+  bool get isBlacklistMode => filterMode == 'blacklist';
 
   /// Computes live remaining minutes taking into account pauses and time elapsed
   int computeRemainingMinutes([DateTime? now]) {
@@ -63,6 +69,8 @@ class SessionModel {
     bool? isPrayerPause,
     bool? isInternetBlocked,
     List<String>? allowedApps,
+    String? filterMode,
+    List<String>? blockedApps,
     String? status,
     DateTime? endedAt,
     int? totalPausedSeconds,
@@ -78,6 +86,8 @@ class SessionModel {
       isPrayerPause: isPrayerPause ?? this.isPrayerPause,
       isInternetBlocked: isInternetBlocked ?? this.isInternetBlocked,
       allowedApps: allowedApps ?? this.allowedApps,
+      filterMode: filterMode ?? this.filterMode,
+      blockedApps: blockedApps ?? this.blockedApps,
       status: status ?? this.status,
       endedAt: endedAt ?? this.endedAt,
       totalPausedSeconds: totalPausedSeconds ?? this.totalPausedSeconds,
@@ -96,6 +106,8 @@ class SessionModel {
       'isPrayerPause': isPrayerPause,
       'isInternetBlocked': isInternetBlocked,
       'allowedApps': allowedApps,
+      'filterMode': filterMode,
+      'blockedApps': blockedApps,
       'status': status,
       'endedAt': endedAt?.toIso8601String(),
       'totalPausedSeconds': totalPausedSeconds,
@@ -114,6 +126,9 @@ class SessionModel {
     final appsRaw = map['allowedApps'];
     final List<String> parsedApps = appsRaw is List ? appsRaw.map((e) => e.toString()).toList() : [];
 
+    final blockedRaw = map['blockedApps'];
+    final List<String> parsedBlocked = blockedRaw is List ? blockedRaw.map((e) => e.toString()).toList() : [];
+
     final duration = (map['durationMinutes'] as num?)?.toInt() ?? 30;
     final storedRemaining = (map['remainingMinutes'] as num?)?.toInt() ?? duration;
 
@@ -130,6 +145,8 @@ class SessionModel {
       isPrayerPause: map['isPrayerPause'] == true,
       isInternetBlocked: map['isInternetBlocked'] == true,
       allowedApps: parsedApps,
+      filterMode: map['filterMode'] ?? 'whitelist',
+      blockedApps: parsedBlocked,
       status: map['status'] ?? 'active',
       endedAt: parsedEnd,
       totalPausedSeconds: totalPaused,

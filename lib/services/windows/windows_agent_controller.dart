@@ -149,21 +149,27 @@ class WindowsAgentController extends ChangeNotifier {
     _activeSession = session;
     _isKioskLocked = session.isPrayerPause;
 
-    // Start watchdog with whitelist
+    // Start watchdog with dual mode policy
     if (!_watchdog.isRunning) {
       _watchdog.startWatchdog(
         allowedApps: session.allowedApps,
+        filterMode: session.filterMode,
+        blockedApps: session.blockedApps,
         onTerminated: (exe) {
           _sessionService.logSecurityEvent(
             _deviceId,
             'process_terminated',
-            'Terminated prohibited process: $exe',
+            'Terminated unauthorized process: $exe (Policy: ${session.filterMode})',
           );
         },
       );
       _hostsFirewall.applyDomainBlocks();
     } else {
-      _watchdog.updateAllowedApps(session.allowedApps);
+      _watchdog.updatePolicy(
+        allowedApps: session.allowedApps,
+        filterMode: session.filterMode,
+        blockedApps: session.blockedApps,
+      );
     }
 
     // Internet killswitch

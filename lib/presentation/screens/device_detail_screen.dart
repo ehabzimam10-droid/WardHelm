@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/constants/app_constants.dart';
+import '../../core/localization/app_localizations.dart';
 import '../../data/models/device_model.dart';
 import '../../state/app_state.dart';
 import '../../state/device_state.dart';
@@ -30,10 +31,16 @@ class DeviceDetailScreen extends StatefulWidget {
 
 class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
   int _selectedDuration = 30;
+  String _filterMode = 'whitelist';
   List<String> _selectedApps = List.from(AppConstants.defaultRobloxProcesses);
   bool _isUpdatingDevice = false;
 
-  Future<void> _triggerRemoteUpdate(DeviceModel dev) async {
+  void _goBack() {
+    widget.deviceState.deselectDevice();
+    widget.appState.navigateTo(AppView.dashboard);
+  }
+
+  Future<void> _triggerRemoteUpdate(DeviceModel dev, AppLocalizations loc) async {
     setState(() => _isUpdatingDevice = true);
     final success = await widget.deviceState.triggerDeviceUpdate(dev.id);
     if (!mounted) return;
@@ -42,11 +49,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         backgroundColor: success ? AppColors.success : AppColors.danger,
-        content: Text(
-          success
-              ? 'تم إرسال أمر التحديث إلى ${dev.name} بنجاح! سيقوم الوكيل بالفحص والتحديث التلقائي خلال ثوانٍ.'
-              : 'تعذر إرسال أمر التحديث إلى الجهاز.',
-        ),
+        content: Text(success ? loc.updateAgentSuccess : loc.updateAgentFail),
       ),
     );
   }
@@ -68,28 +71,30 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
     final success = await widget.sessionState.startNewSession(
       deviceId: widget.device.id,
       durationMinutes: _selectedDuration,
-      allowedApps: _selectedApps,
+      allowedApps: _filterMode == 'whitelist' ? _selectedApps : const [],
+      filterMode: _filterMode,
+      blockedApps: _filterMode == 'blacklist' ? _selectedApps : const [],
     );
     if (success) {
       await widget.deviceState.refreshDevices(silent: true);
     }
   }
 
-  Future<void> _endSession() async {
+  Future<void> _endSession(AppLocalizations loc) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('إنهاء الجلسة المقيدة'),
-        content: const Text('هل أنت متأكد من إنهاء الجلسة واستعادة وضع المالك الحر فوراً؟'),
+        title: Text(loc.confirmEndSessionTitle),
+        content: Text(loc.confirmEndSessionMsg),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('إلغاء'),
+            child: Text(loc.cancel),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('إنهاء الجلسة الآن'),
+            child: Text(loc.endSessionNow),
           ),
         ],
       ),
@@ -103,319 +108,359 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations(isArabic: widget.appState.isArabic);
     final dev = widget.deviceState.devices.firstWhere(
       (d) => d.id == widget.device.id,
       orElse: () => widget.device,
     );
     final session = widget.sessionState.activeSession;
     final isControlled = dev.isControlledMode && session != null && session.isActive;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded),
-          onPressed: () => widget.appState.navigateTo(AppView.dashboard),
-        ),
-        title: Text(dev.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-        actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 16),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: dev.isActivelyOnline
-                  ? AppColors.success.withOpacity(0.12)
-                  : Colors.grey.withOpacity(0.12),
-              borderRadius: BorderRadius.circular(12),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) {
+          _goBack();
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: Icon(
+              widget.appState.isArabic
+                  ? Icons.arrow_forward_rounded
+                  : Icons.arrow_back_rounded,
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: dev.isActivelyOnline ? AppColors.success : Colors.grey,
-                  ),
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  dev.isActivelyOnline ? 'متصل' : 'غير متصل',
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: dev.isActivelyOnline ? AppColors.success : Colors.grey,
-                  ),
-                ),
-              ],
-            ),
+            tooltip: loc.backToDashboard,
+            onPressed: _goBack,
           ),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Mode Banner
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: isControlled
-                            ? AppColors.warning.withOpacity(0.12)
-                            : AppColors.primary.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(
-                        isControlled ? Icons.lock_clock_rounded : Icons.shield_rounded,
-                        color: isControlled ? AppColors.warning : AppColors.primary,
-                      ),
+          title: Text(dev.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+          actions: [
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: dev.isActivelyOnline
+                    ? AppColors.success.withOpacity(0.12)
+                    : Colors.grey.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: dev.isActivelyOnline ? AppColors.success : Colors.grey,
                     ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            isControlled ? 'جلسة مقيدة نشطة' : 'وضع المالك الحر (Owner Mode)',
-                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            isControlled
-                                ? 'يتم فرض قيود الوقت والتطبيقات والإنترنت على الحاسوب'
-                                : 'الحاسوب مفتوح وطبيعي 100% بدون أي قيود أو مراقبة',
-                            style: const TextStyle(fontSize: 12, color: AppColors.darkTextMuted),
-                          ),
-                        ],
-                      ),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    dev.isActivelyOnline ? loc.online : loc.offline,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: dev.isActivelyOnline ? AppColors.success : Colors.grey,
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 20),
-
-            // Active Session Controls OR Session Launcher
-            if (isControlled) ...[
-              CountdownTimerWidget(
-                remainingMinutes: session.remainingMinutes,
-                isPrayerPause: session.isPrayerPause,
-                onPrayerToggle: () => widget.sessionState.togglePrayerPause(),
-              ),
-              const SizedBox(height: 16),
-              SessionControlPanel(
-                session: session,
-                onPrayerToggle: () => widget.sessionState.togglePrayerPause(),
-                onExtend15: () => widget.sessionState.extendTime(15),
-                onExtend30: () => widget.sessionState.extendTime(30),
-                onKillswitchToggle: () => widget.sessionState.toggleKillswitch(),
-                onEndSession: _endSession,
-              ),
-            ] else ...[
+          ],
+        ),
+        body: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Mode Banner
               Card(
                 child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  padding: const EdgeInsets.all(16),
+                  child: Row(
                     children: [
-                      const Text(
-                        'بدء جلسة مقيدة جديدة',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: isControlled
+                              ? AppColors.warning.withOpacity(0.12)
+                              : AppColors.primary.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          isControlled ? Icons.lock_clock_rounded : Icons.shield_rounded,
+                          color: isControlled ? AppColors.warning : AppColors.primary,
+                        ),
                       ),
-                      const SizedBox(height: 16),
-
-                      // Duration Selector
-                      const Text(
-                        'تحديد مدة الجلسة',
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        children: [15, 30, 45, 60, 90].map((mins) {
-                          final isSelected = _selectedDuration == mins;
-                          return ChoiceChip(
-                            label: Text('$mins دقيقة'),
-                            selected: isSelected,
-                            onSelected: (_) => setState(() => _selectedDuration = mins),
-                            selectedColor: AppColors.primary,
-                            labelStyle: TextStyle(
-                              color: isSelected ? Colors.white : null,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              isControlled ? loc.controlledMode : loc.ownerMode,
+                              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                             ),
-                          );
-                        }).toList(),
-                      ),
-                      const SizedBox(height: 20),
-
-                      // Whitelist Selector
-                      AppWhitelistSelector(
-                        selectedApps: _selectedApps,
-                        onChanged: (apps) => setState(() => _selectedApps = apps),
-                      ),
-                      const SizedBox(height: 24),
-
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: widget.sessionState.isLoading ? null : _startSession,
-                          icon: const Icon(Icons.play_arrow_rounded),
-                          label: const Text('بدء الجلسة وتطبيق القيود فوراً'),
+                            const SizedBox(height: 2),
+                            Text(
+                              isControlled ? loc.controlledModeDesc : loc.ownerModeDesc,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
               ),
-            ],
-            const SizedBox(height: 20),
+              const SizedBox(height: 20),
 
-            // Agent Version & Auto-Updater Section
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
+              // Active Session Controls OR Session Launcher
+              if (isControlled) ...[
+                CountdownTimerWidget(
+                  remainingMinutes: session.remainingMinutes,
+                  isPrayerPause: session.isPrayerPause,
+                  onPrayerToggle: () => widget.sessionState.togglePrayerPause(),
+                ),
+                const SizedBox(height: 16),
+                SessionControlPanel(
+                  session: session,
+                  onPrayerToggle: () => widget.sessionState.togglePrayerPause(),
+                  onExtend15: () => widget.sessionState.extendTime(15),
+                  onExtend30: () => widget.sessionState.extendTime(30),
+                  onKillswitchToggle: () => widget.sessionState.toggleKillswitch(),
+                  onEndSession: () => _endSession(loc),
+                ),
+              ] else ...[
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(20),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(Icons.system_update_rounded, color: AppColors.primary, size: 20),
+                        Text(
+                          loc.startSession,
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                         ),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'تحديثات برنامج الوكيل (Agent Auto-Updater)',
-                                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                              ),
-                              SizedBox(height: 2),
-                              Text(
-                                'التحكم بنسخة البرنامج والتحديث التلقائي عن بُعد',
-                                style: TextStyle(fontSize: 12, color: AppColors.darkTextMuted),
-                              ),
-                            ],
-                          ),
+                        const SizedBox(height: 16),
+
+                        // Duration Selector
+                        Text(
+                          loc.durationMinutes,
+                          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
                         ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            'الإصدار: v${dev.version}',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.primary,
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          children: [15, 30, 45, 60, 90].map((mins) {
+                            final isSelected = _selectedDuration == mins;
+                            return ChoiceChip(
+                              label: Text(widget.appState.isArabic ? '$mins دقيقة' : '$mins Min'),
+                              selected: isSelected,
+                              onSelected: (_) => setState(() => _selectedDuration = mins),
+                              selectedColor: AppColors.primary,
+                              labelStyle: TextStyle(
+                                color: isSelected ? Colors.white : null,
+                                fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 20),
+
+                        // Smart App Selector (Whitelist vs Blacklist)
+                        SmartAppSelector(
+                          filterMode: _filterMode,
+                          onFilterModeChanged: (mode) => setState(() => _filterMode = mode),
+                          selectedApps: _selectedApps,
+                          onAppsChanged: (apps) => setState(() => _selectedApps = apps),
+                          deviceInstalledApps: dev.installedApps,
+                          isArabic: widget.appState.isArabic,
+                        ),
+                        const SizedBox(height: 24),
+
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: widget.sessionState.isLoading ? null : _startSession,
+                            icon: const Icon(Icons.play_arrow_rounded),
+                            label: Text(
+                              widget.appState.isArabic
+                                  ? 'بدء الجلسة وتطبيق القيود فوراً'
+                                  : 'Start Session & Apply Guard Now',
                             ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 14),
-                    const Text(
-                      'الوكيل مزود بنظام التحديث الذاتي التلقائي. عند الضغط أدناه سيتم إرسال إشعار فوري للبيسي ليقوم بتحميل أحدث ملف تنفيذي وتثبيته وإعادة تشغيل نفسه دون مقاطعة.',
-                      style: TextStyle(fontSize: 13, height: 1.4),
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: _isUpdatingDevice ? null : () => _triggerRemoteUpdate(dev),
-                        icon: _isUpdatingDevice
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.sync_rounded),
-                        label: Text(_isUpdatingDevice ? 'جارٍ إرسال أمر التحديث...' : 'فحص وتحديث برنامج هذا البيسي الآن'),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(height: 24),
+              ],
+              const SizedBox(height: 20),
 
-            // Security Audit Logs Section
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text(
-                          'سجل الأمان والتنبيهات الحية',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.refresh_rounded, size: 20),
-                          onPressed: () => widget.sessionState.loadLogs(widget.device.id),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    if (widget.sessionState.logs.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 20),
-                        child: Center(
-                          child: Text(
-                            'لا توجد أحداث مسجلة بعد',
-                            style: TextStyle(color: AppColors.darkTextMuted, fontSize: 13),
+              // Agent Version & Auto-Updater Section
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(Icons.system_update_rounded, color: AppColors.primary, size: 20),
                           ),
-                        ),
-                      )
-                    else
-                      ...widget.sessionState.logs.take(10).map((log) {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Icon(
-                                log.eventType == 'process_terminated'
-                                    ? Icons.block_flipped
-                                    : Icons.info_outline_rounded,
-                                color: log.eventType == 'process_terminated'
-                                    ? AppColors.danger
-                                    : AppColors.primary,
-                                size: 18,
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  log.details,
-                                  style: const TextStyle(fontSize: 13),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  widget.appState.isArabic
+                                      ? 'تحديثات برنامج الوكيل (Agent Auto-Updater)'
+                                      : 'Agent Auto-Updater',
+                                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
                                 ),
-                              ),
-                            ],
+                                const SizedBox(height: 2),
+                                Text(
+                                  widget.appState.isArabic
+                                      ? 'التحكم بنسخة البرنامج والتحديث التلقائي عن بُعد'
+                                      : 'Remote fleet version control & automatic update',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        );
-                      }),
-                  ],
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              'v${dev.version}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      Text(
+                        widget.appState.isArabic
+                            ? 'الوكيل مزود بنظام التحديث الذاتي التلقائي. عند الضغط أدناه سيتم إرسال إشعار فوري للبيسي ليقوم بتحميل أحدث ملف تنفيذي وتثبيته وإعادة تشغيل نفسه دون مقاطعة.'
+                            : 'The agent features autonomous self-updating. Triggering an update commands the remote PC to download and install the latest binary seamlessly.',
+                        style: const TextStyle(fontSize: 13, height: 1.4),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: _isUpdatingDevice ? null : () => _triggerRemoteUpdate(dev, loc),
+                          icon: _isUpdatingDevice
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2),
+                                )
+                              : const Icon(Icons.sync_rounded),
+                          label: Text(
+                            _isUpdatingDevice
+                                ? (widget.appState.isArabic ? 'جارٍ إرسال أمر التحديث...' : 'Sending update command...')
+                                : (widget.appState.isArabic ? 'فحص وتحديث برنامج هذا البيسي الآن' : 'Check & Update This PC Now'),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+              const SizedBox(height: 24),
+
+              // Security Audit Logs Section
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            loc.securityLogs,
+                            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.refresh_rounded, size: 20),
+                            onPressed: () => widget.sessionState.loadLogs(widget.device.id),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      if (widget.sessionState.logs.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 20),
+                          child: Center(
+                            child: Text(
+                              loc.noLogs,
+                              style: TextStyle(
+                                color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        ...widget.sessionState.logs.take(10).map((log) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Icon(
+                                  log.eventType == 'process_terminated'
+                                      ? Icons.block_flipped
+                                      : Icons.info_outline_rounded,
+                                  color: log.eventType == 'process_terminated'
+                                      ? AppColors.danger
+                                      : AppColors.primary,
+                                  size: 18,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    log.details,
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

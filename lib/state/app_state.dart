@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import '../core/localization/app_localizations.dart';
 
 enum AppView { dashboard, deviceDetail, agentKiosk, settings }
 
@@ -16,6 +17,7 @@ class AppState extends ChangeNotifier {
 
   ThemeMode get themeMode => _themeMode;
   bool get isArabic => _isArabic;
+  AppLocalizations get loc => AppLocalizations(isArabic: _isArabic);
   bool get isDarkMode => _themeMode == ThemeMode.dark;
   AppView get currentView => _currentView;
   String? get selectedDeviceId => _selectedDeviceId;

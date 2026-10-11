@@ -66,7 +66,9 @@ class SessionState extends ChangeNotifier {
   Future<bool> startNewSession({
     required String deviceId,
     required int durationMinutes,
-    required List<String> allowedApps,
+    List<String> allowedApps = const [],
+    String filterMode = 'whitelist',
+    List<String> blockedApps = const [],
   }) async {
     _isLoading = true;
     notifyListeners();
@@ -75,6 +77,8 @@ class SessionState extends ChangeNotifier {
       deviceId: deviceId,
       durationMinutes: durationMinutes,
       allowedApps: allowedApps,
+      filterMode: filterMode,
+      blockedApps: blockedApps,
     );
     _isLoading = false;
 

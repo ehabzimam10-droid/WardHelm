@@ -29,19 +29,20 @@ class DashboardScreen extends StatelessWidget {
   }
 
   Future<void> _showUpdateDialog(BuildContext context) async {
+    final loc = appState.loc;
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => const Center(
+      builder: (ctx) => Center(
         child: Card(
           child: Padding(
-            padding: EdgeInsets.all(24),
+            padding: const EdgeInsets.all(24),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                CircularProgressIndicator(),
-                SizedBox(height: 16),
-                Text('جارٍ فحص توفر تحديثات جديدة...'),
+                const CircularProgressIndicator(),
+                const SizedBox(height: 16),
+                Text(appState.isArabic ? 'جارٍ فحص توفر تحديثات جديدة...' : 'Checking for updates...'),
               ],
             ),
           ),
@@ -63,21 +64,23 @@ class DashboardScreen extends StatelessWidget {
               color: info.hasUpdate ? AppColors.warning : AppColors.success,
             ),
             const SizedBox(width: 10),
-            Text(info.hasUpdate ? 'يتوفر تحديث جديد!' : 'أنت على أحدث إصدار'),
+            Text(info.hasUpdate ? loc.updateAvailable : loc.upToDate),
           ],
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('الإصدار الحالي: v${info.currentVersion}'),
+            Text('${loc.currentVersion}: v${info.currentVersion}'),
             const SizedBox(height: 4),
-            Text('أحدث إصدار: v${info.latestVersion}', style: const TextStyle(fontWeight: FontWeight.bold)),
+            Text('${loc.latestVersion}: v${info.latestVersion}', style: const TextStyle(fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             Text(
               info.hasUpdate
-                  ? 'ملاحظات الإصدار:\n${info.releaseNotes}'
-                  : 'تطبيق الويب وكافة ملفات النظام محدثة بالكامل وتعمل بأحدث التقنيات.',
+                  ? '${appState.isArabic ? "ملاحظات الإصدار" : "Release Notes"}:\n${info.releaseNotes}'
+                  : (appState.isArabic
+                      ? 'تطبيق الويب وكافة ملفات النظام محدثة بالكامل وتعمل بأحدث التقنيات.'
+                      : 'All system binaries and web dashboard are up to date.'),
               style: const TextStyle(fontSize: 13),
             ),
           ],
@@ -85,7 +88,7 @@ class DashboardScreen extends StatelessWidget {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('إغلاق'),
+            child: Text(loc.cancel),
           ),
           if (info.hasUpdate)
             ElevatedButton(
@@ -93,15 +96,46 @@ class DashboardScreen extends StatelessWidget {
                 Navigator.of(ctx).pop();
                 appState.navigateTo(AppView.settings);
               },
-              child: const Text('الانتقال للتحديثات'),
+              child: Text(appState.isArabic ? 'الانتقال للتحديثات' : 'Go to Updates'),
             ),
         ],
       ),
     );
   }
 
+  Future<void> _handleLogout(BuildContext context) async {
+    final loc = appState.loc;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Text(loc.confirmLogoutTitle),
+        content: Text(loc.confirmLogoutMsg),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(loc.cancel),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(loc.logout),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      if (onLogout != null) {
+        onLogout!();
+      } else {
+        appState.lockDashboard();
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final loc = appState.loc;
     final devices = deviceState.devices;
     final onlineCount = devices.where((d) => d.isActivelyOnline).length;
     final controlledCount = devices.where((d) => d.isControlledMode).length;
@@ -109,19 +143,25 @@ class DashboardScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: AppColors.primary.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(8),
+            Image.asset(
+              'assets/wardhelm_logo.png',
+              width: 28,
+              height: 28,
+              errorBuilder: (_, _, _) => Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(Icons.shield_rounded, color: AppColors.primary, size: 18),
               ),
-              child: const Icon(Icons.shield_rounded, color: AppColors.primary, size: 20),
             ),
             const SizedBox(width: 10),
-            const Text(
-              'WardHelm',
-              style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
+            Text(
+              loc.appTitle,
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18),
             ),
           ],
         ),
@@ -130,12 +170,31 @@ class DashboardScreen extends StatelessWidget {
             IconButton(
               onPressed: () => appState.navigateTo(AppView.agentKiosk),
               icon: const Icon(Icons.monitor_rounded),
-              tooltip: 'شاشة حارس الجهاز (Agent Kiosk)',
+              tooltip: loc.agentKiosk,
             ),
           IconButton(
             onPressed: () => _showUpdateDialog(context),
             icon: const Icon(Icons.system_update_rounded),
-            tooltip: 'فحص وجود تحديثات للنظام',
+            tooltip: loc.checkUpdates,
+          ),
+          // Language Switcher Button (Direct 1-click toggle)
+          IconButton(
+            onPressed: appState.toggleLanguage,
+            icon: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.4),
+                  width: 1.2,
+                ),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                appState.isArabic ? 'EN' : 'عربي',
+                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+              ),
+            ),
+            tooltip: appState.isArabic ? 'Switch to English' : 'التحويل إلى العربية',
           ),
           ThemeToggleButton(
             isDarkMode: appState.isDarkMode,
@@ -144,17 +203,17 @@ class DashboardScreen extends StatelessWidget {
           IconButton(
             onPressed: () => deviceState.refreshDevices(),
             icon: const Icon(Icons.refresh_rounded),
-            tooltip: 'تحديث الحالة',
+            tooltip: loc.refresh,
           ),
           IconButton(
             onPressed: () => appState.navigateTo(AppView.settings),
             icon: const Icon(Icons.settings_outlined),
-            tooltip: 'الإعدادات',
+            tooltip: loc.settings,
           ),
           IconButton(
-            onPressed: () => onLogout != null ? onLogout!() : appState.lockDashboard(),
+            onPressed: () => _handleLogout(context),
             icon: const Icon(Icons.logout_rounded, color: AppColors.danger),
-            tooltip: 'تسجيل الخروج',
+            tooltip: loc.logout,
           ),
           const SizedBox(width: 8),
         ],
@@ -172,25 +231,25 @@ class DashboardScreen extends StatelessWidget {
                 children: [
                   Expanded(
                     child: _MetricCard(
-                      label: 'إجمالي الأجهزة',
+                      label: loc.totalDevices,
                       value: '${devices.length}',
                       icon: Icons.devices_rounded,
                       color: AppColors.primary,
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: _MetricCard(
-                      label: 'متصل الآن',
+                      label: loc.onlineNow,
                       value: '$onlineCount',
                       icon: Icons.wifi_rounded,
                       color: AppColors.success,
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 10),
                   Expanded(
                     child: _MetricCard(
-                      label: 'جلسات مقيدة',
+                      label: loc.controlledSessions,
                       value: '$controlledCount',
                       icon: Icons.lock_clock_rounded,
                       color: AppColors.warning,
@@ -204,14 +263,14 @@ class DashboardScreen extends StatelessWidget {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    'الحواسيب المتصلة',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  Text(
+                    loc.devices,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   TextButton.icon(
                     onPressed: () => _openPairingDialog(context),
                     icon: const Icon(Icons.add_rounded, size: 18),
-                    label: const Text('ربط جهاز جديد'),
+                    label: Text(loc.addDevice),
                   ),
                 ],
               ),
@@ -238,21 +297,21 @@ class DashboardScreen extends StatelessWidget {
                           color: AppColors.darkTextMuted.withOpacity(0.5),
                         ),
                         const SizedBox(height: 16),
-                        const Text(
-                          'لا يوجد أي حاسوب مرتبط بعد',
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        Text(
+                          loc.noDevicesTitle,
+                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 6),
-                        const Text(
-                          'اضغط على زر ربط جهاز جديد وأدخل الرمز الظاهر على شاشة الحاسوب لبدء التحكم.',
+                        Text(
+                          loc.noDevicesDesc,
                           textAlign: TextAlign.center,
-                          style: TextStyle(fontSize: 13, color: AppColors.darkTextMuted),
+                          style: const TextStyle(fontSize: 13, color: AppColors.darkTextMuted),
                         ),
                         const SizedBox(height: 20),
                         ElevatedButton.icon(
                           onPressed: () => _openPairingDialog(context),
                           icon: const Icon(Icons.qr_code_rounded, size: 18),
-                          label: const Text('ربط أول جهاز الآن'),
+                          label: Text(loc.pairFirstDevice),
                         ),
                       ],
                     ),
@@ -275,7 +334,7 @@ class DashboardScreen extends StatelessWidget {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openPairingDialog(context),
         icon: const Icon(Icons.add_rounded),
-        label: const Text('ربط جهاز'),
+        label: Text(loc.addDevice),
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
       ),
@@ -298,20 +357,30 @@ class _MetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  label,
-                  style: const TextStyle(fontSize: 12, color: AppColors.darkTextMuted),
+                Icon(icon, color: color, size: 16),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF475569),
+                    ),
+                  ),
                 ),
-                Icon(icon, color: color, size: 18),
               ],
             ),
             const SizedBox(height: 8),
