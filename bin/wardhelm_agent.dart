@@ -46,99 +46,106 @@ param(
   [string]$IconPath = ""
 )
 
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
+$ErrorActionPreference = "SilentlyContinue"
+$logPath = Join-Path $env:LOCALAPPDATA "WardHelm\tray.log"
 
-$notify = New-Object System.Windows.Forms.NotifyIcon
-$notify.Text = "WardHelm - حارس الحاسوب الذكي (v1.0.3)"
+try {
+  Add-Type -AssemblyName System.Windows.Forms
+  Add-Type -AssemblyName System.Drawing
 
-# Load Icon
-if ($IconPath -and (Test-Path $IconPath)) {
-  try {
-    $notify.Icon = New-Object System.Drawing.Icon($IconPath)
-  } catch {
+  $notify = New-Object System.Windows.Forms.NotifyIcon
+  # Maximum length in WinForms NotifyIcon is strictly 63 characters
+  $notify.Text = "WardHelm PC Guardian"
+
+  # Load Icon
+  if ($IconPath -and (Test-Path $IconPath)) {
+    try {
+      $notify.Icon = New-Object System.Drawing.Icon($IconPath)
+    } catch {
+      $notify.Icon = [System.Drawing.SystemIcons]::Shield
+    }
+  } else {
     $notify.Icon = [System.Drawing.SystemIcons]::Shield
   }
-} else {
-  $notify.Icon = [System.Drawing.SystemIcons]::Shield
-}
 
-# Context Menu
-$contextMenu = New-Object System.Windows.Forms.ContextMenu
+  $contextMenu = New-Object System.Windows.Forms.ContextMenu
 
-$openItem = New-Object System.Windows.Forms.MenuItem("🛡️ فتح لوحة التحكم")
-$openItem.add_Click({
-  try {
-    $edge = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
-    if (-not (Test-Path $edge)) { $edge = "C:\Program Files\Microsoft\Edge\Application\msedge.exe" }
-    if (Test-Path $edge) {
-      Start-Process $edge -ArgumentList "--app=http://127.0.0.1:48123 --window-size=480,720 --app-id=wardhelm_agent_ui"
-    } else {
-      Start-Process "http://127.0.0.1:48123"
-    }
-  } catch {}
-})
+  $openItem = New-Object System.Windows.Forms.MenuItem("🛡️ فتح لوحة التحكم (Dashboard)")
+  $openItem.add_Click({
+    try {
+      $edge = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
+      if (-not (Test-Path $edge)) { $edge = "C:\Program Files\Microsoft\Edge\Application\msedge.exe" }
+      if (Test-Path $edge) {
+        Start-Process $edge -ArgumentList "--app=http://127.0.0.1:48123 --window-size=480,720 --app-id=wardhelm_agent_ui"
+      } else {
+        Start-Process "http://127.0.0.1:48123"
+      }
+    } catch {}
+  })
 
-$updateItem = New-Object System.Windows.Forms.MenuItem("🔄 فحص التحديثات الآن")
-$updateItem.add_Click({
-  try {
-    Invoke-RestMethod -Uri "http://127.0.0.1:48123/check_update" -Method Post -TimeoutSec 3 | Out-Null
-    $notify.ShowBalloonTip(3000, "WardHelm", "جارٍ فحص التحديثات السحابية...", [System.Windows.Forms.ToolTipIcon]::Info)
-  } catch {}
-})
+  $updateItem = New-Object System.Windows.Forms.MenuItem("🔄 فحص التحديثات الآن (Check Updates)")
+  $updateItem.add_Click({
+    try {
+      Invoke-RestMethod -Uri "http://127.0.0.1:48123/check_update" -Method Post -TimeoutSec 3 | Out-Null
+      $notify.ShowBalloonTip(3000, "WardHelm", "جارٍ فحص التحديثات السحابية...", [System.Windows.Forms.ToolTipIcon]::Info)
+    } catch {}
+  })
 
-$statusItem = New-Object System.Windows.Forms.MenuItem("🟢 الحماية نشطة في الخلفية")
-$statusItem.Enabled = $false
+  $statusItem = New-Object System.Windows.Forms.MenuItem("🟢 الحماية نشطة في الخلفية (Active)")
+  $statusItem.Enabled = $false
 
-$separator = New-Object System.Windows.Forms.MenuItem("-")
+  $separator = New-Object System.Windows.Forms.MenuItem("-")
 
-$exitItem = New-Object System.Windows.Forms.MenuItem("❌ إغلاق الحارس تماماً")
-$exitItem.add_Click({
-  try {
-    Invoke-RestMethod -Uri "http://127.0.0.1:48123/exit" -Method Post -TimeoutSec 3 | Out-Null
-  } catch {}
-  $notify.Visible = $false
-  $notify.Dispose()
-  [System.Windows.Forms.Application]::Exit()
-})
+  $exitItem = New-Object System.Windows.Forms.MenuItem("❌ إغلاق الحارس تماماً (Exit)")
+  $exitItem.add_Click({
+    try {
+      Invoke-RestMethod -Uri "http://127.0.0.1:48123/exit" -Method Post -TimeoutSec 3 | Out-Null
+    } catch {}
+    $notify.Visible = $false
+    $notify.Dispose()
+    [System.Windows.Forms.Application]::Exit()
+  })
 
-$contextMenu.MenuItems.Add($openItem) | Out-Null
-$contextMenu.MenuItems.Add($updateItem) | Out-Null
-$contextMenu.MenuItems.Add($statusItem) | Out-Null
-$contextMenu.MenuItems.Add($separator) | Out-Null
-$contextMenu.MenuItems.Add($exitItem) | Out-Null
+  $contextMenu.MenuItems.Add($openItem) | Out-Null
+  $contextMenu.MenuItems.Add($updateItem) | Out-Null
+  $contextMenu.MenuItems.Add($statusItem) | Out-Null
+  $contextMenu.MenuItems.Add($separator) | Out-Null
+  $contextMenu.MenuItems.Add($exitItem) | Out-Null
 
-$notify.ContextMenu = $contextMenu
+  $notify.ContextMenu = $contextMenu
 
-# Click and Double Click to Open GUI
-$notify.add_DoubleClick({
-  $openItem.PerformClick()
-})
-$notify.add_Click({
-  if ([System.Windows.Forms.Control]::MouseButtons -eq [System.Windows.Forms.MouseButtons]::Left) {
+  # Double-click or click to open GUI
+  $notify.add_DoubleClick({
     $openItem.PerformClick()
-  }
-})
-
-$notify.Visible = $true
-$notify.ShowBalloonTip(3000, "WardHelm - حارس الحاسوب", "البرنامج يعمل الآن في الخلفية لحماية هذا الجهاز.", [System.Windows.Forms.ToolTipIcon]::Info)
-
-# Timer to ensure Tray exits when Agent process exits
-$timer = New-Object System.Windows.Forms.Timer
-$timer.Interval = 2500
-$timer.add_Tick({
-  if ($AgentPid -gt 0) {
-    $p = Get-Process -Id $AgentPid -ErrorAction SilentlyContinue
-    if (-not $p) {
-      $notify.Visible = $false
-      $notify.Dispose()
-      [System.Windows.Forms.Application]::Exit()
+  })
+  $notify.add_Click({
+    if ([System.Windows.Forms.Control]::MouseButtons -eq [System.Windows.Forms.MouseButtons]::Left) {
+      $openItem.PerformClick()
     }
-  }
-})
-$timer.Start()
+  })
 
-[System.Windows.Forms.Application]::Run()
+  $notify.Visible = $true
+  $notify.ShowBalloonTip(3000, "WardHelm Guardian", "البرنامج يعمل الآن في علبة النظام بجوار الساعة.", [System.Windows.Forms.ToolTipIcon]::Info)
+
+  # Check if Agent process is still alive every 3 seconds
+  $timer = New-Object System.Windows.Forms.Timer
+  $timer.Interval = 3000
+  $timer.add_Tick({
+    if ($AgentPid -gt 0) {
+      $p = Get-Process -Id $AgentPid -ErrorAction SilentlyContinue
+      if (-not $p) {
+        $notify.Visible = $false
+        $notify.Dispose()
+        [System.Windows.Forms.Application]::Exit()
+      }
+    }
+  })
+  $timer.Start()
+
+  [System.Windows.Forms.Application]::Run()
+} catch {
+  $_ | Out-File -FilePath $logPath -Append
+}
 ''';
 
 /// Ensures permanent installation into %LOCALAPPDATA%\WardHelm, extracts icon, creates Start Menu/Desktop shortcuts, and configures auto-startup
@@ -205,38 +212,38 @@ Future<void> _ensureSelfInstalled() async {
   } catch (_) {}
 }
 
-/// Spawns native Windows System Tray helper in background, extracting script if missing
+/// Spawns native Windows System Tray helper in background with UTF-8 BOM and STA threading
 void _startSystemTrayIcon() {
   if (!Platform.isWindows) return;
   try {
     final localAppData = Platform.environment['LOCALAPPDATA'] ?? r'C:\Users\Public';
-    final installDir = '$localAppData\\WardHelm';
-    var trayScript = '$installDir\\wardhelm_tray.ps1';
-    var iconPath = '$installDir\\wardhelm_logo.ico';
-
-    if (!File(trayScript).existsSync()) {
-      final fallbackDir = Directory.systemTemp.path;
-      trayScript = '$fallbackDir\\wardhelm_tray.ps1';
-      File(trayScript).writeAsStringSync(_embeddedTrayScript);
+    final installDir = Directory('$localAppData\\WardHelm');
+    if (!installDir.existsSync()) {
+      installDir.createSync(recursive: true);
     }
+    final trayScript = File('${installDir.path}\\wardhelm_tray.ps1');
+    final iconFile = File('${installDir.path}\\wardhelm_logo.ico');
 
-    if (!File(iconPath).existsSync()) {
-      iconPath = '';
-    }
+    // Always ensure tray script exists with UTF-8 BOM so PowerShell 5.1 decodes it flawlessly
+    final bomUtf8 = [0xEF, 0xBB, 0xBF, ...utf8.encode(_embeddedTrayScript)];
+    trayScript.writeAsBytesSync(bomUtf8);
+
+    final iconArg = iconFile.existsSync() ? iconFile.path : '';
 
     Process.start(
       'powershell.exe',
       [
         '-NoProfile',
+        '-STA',
         '-WindowStyle',
         'Hidden',
         '-ExecutionPolicy',
         'Bypass',
         '-File',
-        trayScript,
+        trayScript.path,
         '-AgentPid',
         pid.toString(),
-        if (iconPath.isNotEmpty) ...['-IconPath', iconPath],
+        if (iconArg.isNotEmpty) ...['-IconPath', iconArg],
       ],
       mode: ProcessStartMode.detached,
     );
@@ -449,9 +456,9 @@ void main(List<String> args) async {
     }
   });
 
-  // Main 8-second agent sync loop
+  // Main 12-second agent sync loop
   int agentHeartbeatCounter = 0;
-  Timer.periodic(const Duration(seconds: 8), (_) async {
+  Timer.periodic(const Duration(seconds: 12), (_) async {
     if (isUpdating) return;
 
     try {
@@ -468,8 +475,8 @@ void main(List<String> args) async {
         guiServer.mode = dev.mode;
         guiServer.isControlled = dev.isControlledMode;
 
-        // Heartbeat with version stamp (throttled to every 24s)
-        if (agentHeartbeatCounter++ % 3 == 0) {
+        // Heartbeat with version stamp (throttled to every 48s)
+        if (agentHeartbeatCounter++ % 4 == 0) {
           await deviceService.sendHeartbeatDirect(
             deviceId,
             dev,

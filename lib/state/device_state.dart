@@ -28,7 +28,7 @@ class DeviceState extends ChangeNotifier {
   void startPolling() {
     refreshDevices();
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 8), (_) {
+    _pollTimer = Timer.periodic(const Duration(seconds: 20), (_) {
       if (FirestoreDal.isRateLimited) return;
       refreshDevices(silent: true);
     });
@@ -101,7 +101,11 @@ class DeviceState extends ChangeNotifier {
       notifyListeners();
       return true;
     } else {
-      _errorMessage = 'رمز الربط غير صحيح أو انتهت صلاحيته (مدته 60 ثانية)';
+      if (FirestoreDal.lastStatusCode == 429) {
+        _errorMessage = 'تنبيه: تم استنفاد الحد اليومي المجاني لقاعدة بيانات Firebase (Quota Exceeded). يرجى تفعيل باقة Blaze من لوحة تحكم Firebase لإلغاء القيود فوراً، أو انتظار التصفير التلقائي.';
+      } else {
+        _errorMessage = 'رمز الربط غير صحيح أو انتهت صلاحيته (مدته 60 ثانية)';
+      }
       notifyListeners();
       return false;
     }

@@ -32,6 +32,14 @@ class AgentGuiServer {
       _server!.listen((HttpRequest request) async {
         final path = request.uri.path;
 
+        // Security: Block any cross-origin browser requests from external domains
+        final origin = request.headers.value('origin');
+        if (origin != null && !origin.contains('127.0.0.1') && !origin.contains('localhost')) {
+          request.response.statusCode = HttpStatus.forbidden;
+          await request.response.close();
+          return;
+        }
+
         if (path == '/logo.png') {
           request.response.headers.contentType = ContentType('image', 'png');
           request.response.add(base64Decode(AppLogoData.logoPngBase64));

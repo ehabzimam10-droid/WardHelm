@@ -12,6 +12,7 @@ class FirestoreDal {
 
   static String? authToken;
   static int lastStatusCode = 200;
+  static String? lastErrorMessage;
   static DateTime? _rateLimitedUntil;
 
   // Short in-memory cache to prevent redundant concurrent queries
@@ -35,12 +36,16 @@ class FirestoreDal {
     return headers;
   }
 
-  void _handleStatusCode(int code) {
+  void _handleStatusCode(int code, [String? body]) {
     lastStatusCode = code;
     if (code == 429) {
-      _rateLimitedUntil = DateTime.now().add(const Duration(seconds: 12));
+      _rateLimitedUntil = DateTime.now().add(const Duration(seconds: 15));
+      if (body != null && (body.contains('RESOURCE_EXHAUSTED') || body.contains('Quota exceeded'))) {
+        lastErrorMessage = 'RESOURCE_EXHAUSTED';
+      }
     } else if (code == 200 || code == 201 || code == 204) {
       if (isRateLimited) _rateLimitedUntil = null;
+      lastErrorMessage = null;
     }
   }
 
@@ -53,7 +58,7 @@ class FirestoreDal {
     final uri = Uri.parse('$_baseUrl/$collection/$docId$_apiKeyParam');
     try {
       final response = await _client.get(uri, headers: _headers());
-      _handleStatusCode(response.statusCode);
+      _handleStatusCode(response.statusCode, response.body);
       if (response.statusCode == 200) {
         final decoded = json.decode(response.body) as Map<String, dynamic>;
         return _decodeFirestoreFields(decoded['fields'] as Map<String, dynamic>? ?? {});
@@ -85,7 +90,7 @@ class FirestoreDal {
     final uri = Uri.parse('$_baseUrl/$collection$_apiKeyParam');
     try {
       final response = await _client.get(uri, headers: _headers());
-      _handleStatusCode(response.statusCode);
+      _handleStatusCode(response.statusCode, response.body);
       if (response.statusCode == 200) {
         final decoded = json.decode(response.body) as Map<String, dynamic>;
         final documents = decoded['documents'] as List<dynamic>? ?? [];
@@ -126,7 +131,7 @@ class FirestoreDal {
         headers: _headers(),
         body: body,
       );
-      _handleStatusCode(response.statusCode);
+      _handleStatusCode(response.statusCode, response.body);
       if (response.statusCode == 200 || response.statusCode == 201) {
         // Invalidate cache for this collection
         _cacheTime.remove(collection);
@@ -143,7 +148,7 @@ class FirestoreDal {
     final uri = Uri.parse('$_baseUrl/$collection/$docId$_apiKeyParam');
     try {
       final response = await _client.delete(uri, headers: _headers());
-      _handleStatusCode(response.statusCode);
+      _handleStatusCode(response.statusCode, response.body);
       if (response.statusCode == 200 || response.statusCode == 204) {
         _cacheTime.remove(collection);
         return true;

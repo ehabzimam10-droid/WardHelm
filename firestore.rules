@@ -1,36 +1,319 @@
 rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: devices
+// Document ID: {deviceId} (String, unique hardware/system machine identifier)
+// Fields:
+//   - id: string (optional, matches documentId, <= 128 chars)
+//   - name: string (required, 1-100 chars)
+//   - os: string (required, 1-100 chars)
+//   - isOnline: bool (required)
+//   - lastHeartbeat: string (required, ISO 8601 string <= 50 chars) or timestamp
+//   - mode: string (required, in ['owner', 'controlled', 'pairing'])
+//   - activeSessionId: string (optional, nullable, <= 128 chars)
+//   - ownerId: string (optional, nullable, Firebase UID <= 128 chars)
+//   - version: string (optional, <= 50 chars)
+//   - metadata: map (optional, max 30 keys; e.g. installedApps list <= 200 items)
+//
+// Collection: pairing_codes
+// Document ID: {codeId} (String, TOTP pairing code e.g. 'WH-123456')
+// Fields:
+//   - code: string (required, 4-32 chars)
+//   - deviceId: string (required, 3-128 chars)
+//   - deviceName: string (optional, <= 100 chars)
+//   - createdAt: string (optional, ISO 8601 string <= 50 chars) or timestamp
+//   - expiresAt: string (required, ISO 8601 string <= 50 chars) or timestamp
+//   - isClaimed: bool (optional)
+//   - id: string (optional, <= 64 chars)
+//
+// Collection: sessions
+// Document ID: {sessionId} (String e.g. 'sess_1728659123456')
+// Fields:
+//   - id: string (optional, <= 100 chars)
+//   - deviceId: string (required, 1-128 chars)
+//   - startTime: string (required, ISO 8601 string <= 50 chars) or timestamp
+//   - durationMinutes: number (required, 1-1440)
+//   - remainingMinutes: number (required, 0-1440)
+//   - isPaused: bool (optional)
+//   - isPrayerPause: bool (optional)
+//   - isInternetBlocked: bool (optional)
+//   - allowedApps: list (optional, max 200 string items)
+//   - filterMode: string (optional, in ['whitelist', 'blacklist'])
+//   - blockedApps: list (optional, max 200 string items)
+//   - status: string (required, in ['active', 'completed', 'cancelled'])
+//   - endedAt: string (optional, nullable, <= 50 chars) or timestamp
+//   - totalPausedSeconds: number (optional, >= 0)
+//   - lastPauseStartTime: string (optional, nullable, <= 50 chars) or timestamp
+//
+// Collection: security_logs
+// Document ID: {logId} (String e.g. 'log_1728659123456')
+// Fields:
+//   - id: string (optional, <= 100 chars)
+//   - deviceId: string (required, 1-128 chars)
+//   - timestamp: string (required, ISO 8601 string <= 50 chars) or timestamp
+//   - eventType: string (required, 1-100 chars)
+//   - details: string (required, <= 2000 chars)
+//
+// Collection: app_config
+// Document ID: {configId}
+// Read-only for authenticated users, writes restricted.
+// ===============================================================
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Helper functions
+
+    // ===============================================================
+    // Global Helper Functions
+    // ===============================================================
+
     function isAuthenticated() {
       return request.auth != null;
     }
-    
-    // Devices collection
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function hasOnlyAllowedFields(data, fields) {
+      return data.keys().hasOnly(fields);
+    }
+
+    function hasAllRequiredFields(data, fields) {
+      return data.keys().hasAll(fields);
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    function isValidDate(val) {
+      return (val is string && val.size() > 0 && val.size() <= 50) || val is timestamp;
+    }
+
+    // ===============================================================
+    // Domain Validator Functions (Enforced on create AND update)
+    // ===============================================================
+
+    function isValidDevice(data) {
+      return hasOnlyAllowedFields(data, [
+               'id', 'name', 'os', 'isOnline', 'lastHeartbeat', 'mode',
+               'activeSessionId', 'ownerId', 'version', 'metadata'
+             ]) &&
+             hasAllRequiredFields(data, ['name', 'os', 'isOnline', 'lastHeartbeat', 'mode']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 100 &&
+             data.os is string && data.os.size() > 0 && data.os.size() <= 100 &&
+             data.isOnline is bool &&
+             isValidDate(data.lastHeartbeat) &&
+             data.mode is string && data.mode in ['owner', 'controlled', 'pairing'] &&
+             (!('id' in data) || (data.id is string && data.id.size() <= 128)) &&
+             (!('activeSessionId' in data) || data.activeSessionId == null || (data.activeSessionId is string && data.activeSessionId.size() <= 128)) &&
+             (!('ownerId' in data) || data.ownerId == null || (data.ownerId is string && data.ownerId.size() <= 128)) &&
+             (!('version' in data) || (data.version is string && data.version.size() <= 50)) &&
+             (!('metadata' in data) || (
+               data.metadata is map &&
+               data.metadata.keys().size() <= 30 &&
+               (!('installedApps' in data.metadata) || (data.metadata.installedApps is list && data.metadata.installedApps.size() <= 200))
+             ));
+    }
+
+    function isValidPairingCode(data) {
+      return hasOnlyAllowedFields(data, ['code', 'deviceId', 'deviceName', 'createdAt', 'expiresAt', 'isClaimed', 'id']) &&
+             hasAllRequiredFields(data, ['code', 'deviceId', 'expiresAt']) &&
+             data.code is string && data.code.size() >= 4 && data.code.size() <= 32 &&
+             data.deviceId is string && data.deviceId.size() >= 3 && data.deviceId.size() <= 128 &&
+             isValidDate(data.expiresAt) &&
+             (!('deviceName' in data) || (data.deviceName is string && data.deviceName.size() <= 100)) &&
+             (!('createdAt' in data) || isValidDate(data.createdAt)) &&
+             (!('isClaimed' in data) || data.isClaimed is bool) &&
+             (!('id' in data) || (data.id is string && data.id.size() <= 64));
+    }
+
+    function isValidSession(data) {
+      return hasOnlyAllowedFields(data, [
+               'id', 'deviceId', 'startTime', 'durationMinutes', 'remainingMinutes',
+               'isPaused', 'isPrayerPause', 'isInternetBlocked', 'allowedApps',
+               'filterMode', 'blockedApps', 'status', 'endedAt', 'totalPausedSeconds',
+               'lastPauseStartTime'
+             ]) &&
+             hasAllRequiredFields(data, ['deviceId', 'startTime', 'durationMinutes', 'remainingMinutes', 'status']) &&
+             data.deviceId is string && data.deviceId.size() > 0 && data.deviceId.size() <= 128 &&
+             isValidDate(data.startTime) &&
+             data.durationMinutes is number && data.durationMinutes >= 1 && data.durationMinutes <= 1440 &&
+             data.remainingMinutes is number && data.remainingMinutes >= 0 && data.remainingMinutes <= 1440 &&
+             data.status in ['active', 'completed', 'cancelled'] &&
+             (!('isPaused' in data) || data.isPaused is bool) &&
+             (!('isPrayerPause' in data) || data.isPrayerPause is bool) &&
+             (!('isInternetBlocked' in data) || data.isInternetBlocked is bool) &&
+             (!('filterMode' in data) || data.filterMode in ['whitelist', 'blacklist']) &&
+             (!('allowedApps' in data) || (data.allowedApps is list && data.allowedApps.size() <= 200)) &&
+             (!('blockedApps' in data) || (data.blockedApps is list && data.blockedApps.size() <= 200)) &&
+             (!('totalPausedSeconds' in data) || (data.totalPausedSeconds is number && data.totalPausedSeconds >= 0)) &&
+             (!('endedAt' in data) || data.endedAt == null || isValidDate(data.endedAt)) &&
+             (!('lastPauseStartTime' in data) || data.lastPauseStartTime == null || isValidDate(data.lastPauseStartTime)) &&
+             (!('id' in data) || (data.id is string && data.id.size() <= 100));
+    }
+
+    function isValidSecurityLog(data) {
+      return hasOnlyAllowedFields(data, ['id', 'deviceId', 'timestamp', 'eventType', 'details']) &&
+             hasAllRequiredFields(data, ['deviceId', 'timestamp', 'eventType', 'details']) &&
+             data.deviceId is string && data.deviceId.size() > 0 && data.deviceId.size() <= 128 &&
+             isValidDate(data.timestamp) &&
+             data.eventType is string && data.eventType.size() > 0 && data.eventType.size() <= 100 &&
+             data.details is string && data.details.size() <= 2000 &&
+             (!('id' in data) || (data.id is string && data.id.size() <= 100));
+    }
+
+    // ===============================================================
+    // Root Match: Default Deny
+    // ===============================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ===============================================================
+    // Collection: Devices (/devices/{deviceId})
+    // ===============================================================
     match /devices/{deviceId} {
-      // Owner or paired client can read and write
-      allow read, write: if true;
+      // Read access:
+      // - Authenticated owner can read their device
+      // - Authenticated user can read unclaimed devices
+      // - Headless PC agent can read its device document matching deviceId
+      allow get: if (
+                      isAuthenticated() && (
+                        ('ownerId' in resource.data && resource.data.ownerId == request.auth.uid) ||
+                        (!('ownerId' in resource.data) || resource.data.ownerId == null)
+                      )
+                    ) ||
+                    (
+                      !isAuthenticated() &&
+                      (!('id' in resource.data) || resource.data.id == deviceId)
+                    );
+
+      // Authenticated users can list devices in fleet (filtered client-side by ownerId)
+      allow list: if isAuthenticated();
+
+      // Create access:
+      // Authenticated user can claim newly created device document matching their ownerId
+      allow create: if isAuthenticated() &&
+                       request.auth.uid == request.resource.data.ownerId &&
+                       (!('id' in request.resource.data) || request.resource.data.id == deviceId) &&
+                       isValidDevice(request.resource.data);
+
+      // Update access:
+      // 1. Authenticated owner: full updates conforming to schema, ownerId cannot be hijacked
+      // 2. Authenticated user claiming previously unclaimed device
+      // 3. Headless PC agent: can only update heartbeat, status, mode, and metadata; ownerId immutable
+      allow update: if isValidDevice(request.resource.data) && (
+                       (
+                         isAuthenticated() &&
+                         (
+                           ('ownerId' in resource.data && resource.data.ownerId == request.auth.uid) ||
+                           (!('ownerId' in resource.data) || resource.data.ownerId == null)
+                         ) &&
+                         request.resource.data.ownerId == request.auth.uid &&
+                         (!('id' in request.resource.data) || request.resource.data.id == deviceId)
+                       ) ||
+                       (
+                         !isAuthenticated() &&
+                         (!('id' in request.resource.data) || request.resource.data.id == deviceId) &&
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                           'isOnline', 'lastHeartbeat', 'mode', 'activeSessionId', 'version', 'metadata'
+                         ])
+                       )
+                     );
+
+      // Delete access:
+      // Only authenticated owner can delete device
+      allow delete: if isAuthenticated() &&
+                       'ownerId' in resource.data &&
+                       resource.data.ownerId == request.auth.uid;
     }
-    
-    // Pairing codes collection
+
+    // ===============================================================
+    // Collection: Pairing Codes (/pairing_codes/{codeId})
+    // ===============================================================
     match /pairing_codes/{codeId} {
-      allow read, write, delete: if true;
+      // Read & Delete: Authenticated users can read and delete/claim pairing codes
+      allow read, delete: if isAuthenticated();
+
+      // Create: Any client (PC agent generating TOTP codes) can create pairing code document
+      allow create: if isValidPairingCode(request.resource.data) &&
+                       (!('code' in request.resource.data) || request.resource.data.code == codeId);
+
+      // Update: PC agent refreshing pairing code for the same device
+      allow update: if isValidPairingCode(request.resource.data) &&
+                       request.resource.data.deviceId == resource.data.deviceId &&
+                       (!('code' in request.resource.data) || request.resource.data.code == codeId);
     }
-    
-    // Sessions collection
+
+    // ===============================================================
+    // Collection: Sessions (/sessions/{sessionId})
+    // ===============================================================
     match /sessions/{sessionId} {
-      allow read, write: if true;
+      // Read access:
+      // - Authenticated users can read/list sessions
+      // - Headless PC agent can read its own active session by sessionId
+      allow get: if isAuthenticated() ||
+                    (!isAuthenticated() && resource.data.deviceId is string);
+
+      allow list: if isAuthenticated();
+
+      // Create access:
+      // Authenticated users can create new sessions
+      allow create: if isAuthenticated() &&
+                       (!('id' in request.resource.data) || request.resource.data.id == sessionId) &&
+                       isValidSession(request.resource.data);
+
+      // Update access:
+      // - Authenticated users can update/manage sessions (pause, extend, killswitch, end)
+      // - Headless PC agent can mark session completed when expired without altering parameters
+      allow update: if isValidSession(request.resource.data) && (
+                       (
+                         isAuthenticated() &&
+                         request.resource.data.deviceId == resource.data.deviceId &&
+                         (!('id' in request.resource.data) || request.resource.data.id == sessionId)
+                       ) ||
+                       (
+                         !isAuthenticated() &&
+                         resource.data.status == 'active' &&
+                         request.resource.data.status == 'completed' &&
+                         request.resource.data.deviceId == resource.data.deviceId &&
+                         areImmutableFieldsUnchanged(['deviceId', 'startTime', 'durationMinutes', 'allowedApps', 'filterMode', 'blockedApps'])
+                       )
+                     );
+
+      // Delete access:
+      // Authenticated users can delete sessions during device unpair/wipe
+      allow delete: if isAuthenticated();
     }
-    
-    // Security logs
+
+    // ===============================================================
+    // Collection: Security Logs (/security_logs/{logId})
+    // ===============================================================
     match /security_logs/{logId} {
-      allow read, write: if true;
+      // Read access: Authenticated owner can read security audit logs
+      allow read: if isAuthenticated();
+
+      // Create access: PC agent or authenticated owner can create audit logs
+      allow create: if isValidSecurityLog(request.resource.data) &&
+                       (!('id' in request.resource.data) || request.resource.data.id == logId);
+
+      // Update access: Security audit logs are append-only and strictly immutable
+      allow update: if false;
+
+      // Delete access: Authenticated users can delete logs during full device unpair/wipe
+      allow delete: if isAuthenticated();
     }
-    
-    // Settings / App configs
+
+    // ===============================================================
+    // Collection: App Config (/app_config/{configId})
+    // ===============================================================
     match /app_config/{configId} {
-      allow read: if true;
-      allow write: if isAuthenticated();
+      allow read: if isAuthenticated();
+      allow write: if false;
     }
   }
 }

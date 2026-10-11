@@ -1,5 +1,5 @@
 {
-  "version": "1.0.5",
-  "downloadUrl": "https://github.com/ehabzimam10-droid/WardHelm/releases/download/v1.0.5/wardhelm_agent.exe",
-  "releaseNotes": "v1.0.5: حل جذري للحد التكراري 429 بكاش وBackoff ذكي وتحديث توكن تلقائي، تسهيل وقبول رموز الربط بدون فراغات، تثبيت دائم وأيقونة درع سيبراني رسمي واختصارات لا تنقطع، ومنع تكرار النوافذ."
+  "version": "1.0.6",
+  "downloadUrl": "https://github.com/ehabzimam10-droid/WardHelm/releases/download/v1.0.6/wardhelm_agent.exe",
+  "releaseNotes": "v1.0.6: تفعيل أيقونة شريط المهام الأصلية (System Tray بجوار الساعة) بترميز UTF-8 ودعم STA Threading، تشديد قواعد حماية Firestore، تحسين كاش الحافة ورؤوس الأمان، وضبط استهلاك الحصة اليومية لتفادي أخطاء 429."
 }

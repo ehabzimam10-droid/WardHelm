@@ -115,6 +115,12 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
     }
   }
 
+  @override
+  void dispose() {
+    widget.sessionState.stopWatcher();
+    super.dispose();
+  }
+
   Future<void> _startSession() async {
     final success = await widget.sessionState.startNewSession(
       deviceId: widget.device.id,
