@@ -111,6 +111,28 @@ class DeviceState extends ChangeNotifier {
     return success;
   }
 
+  /// Completely unpairs and wipes the device data from the fleet
+  Future<bool> unpairAndWipeDevice(String deviceId) async {
+    _isLoading = true;
+    notifyListeners();
+    try {
+      final success = await _service.unpairAndWipeDevice(deviceId);
+      if (success) {
+        _devices.removeWhere((d) => d.id == deviceId);
+        if (_selectedDevice?.id == deviceId) {
+          _selectedDevice = null;
+        }
+      }
+      return success;
+    } catch (e) {
+      _errorMessage = e.toString();
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
   @override
   void dispose() {
     stopPolling();

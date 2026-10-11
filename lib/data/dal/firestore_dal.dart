@@ -88,7 +88,7 @@ class FirestoreDal {
     final uri = Uri.parse('$_baseUrl/$collection/$docId$_apiKeyParam');
     try {
       final response = await _client.delete(uri, headers: _headers());
-      return response.statusCode == 200;
+      return response.statusCode == 200 || response.statusCode == 204;
     } catch (_) {
       return false;
     }

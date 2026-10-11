@@ -53,9 +53,7 @@ class AppState extends ChangeNotifier {
 
   void navigateTo(AppView view, {String? deviceId}) {
     _currentView = view;
-    if (deviceId != null) {
-      _selectedDeviceId = deviceId;
-    }
+    _selectedDeviceId = (view == AppView.deviceDetail) ? deviceId : null;
     notifyListeners();
   }
 

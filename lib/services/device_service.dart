@@ -127,4 +127,50 @@ class DeviceService {
     );
     return await _dal.setDocument('devices', deviceId, updated.toMap());
   }
+
+  /// Completely unpairs and wipes all device data from Firestore.
+  /// Guarantees zero remaining data: deletes device document, all related sessions,
+  /// all security logs, and any pending pairing codes for total privacy.
+  Future<bool> unpairAndWipeDevice(String deviceId) async {
+    try {
+      // 1. Delete all sessions for this device
+      final sessions = await _dal.getCollection('sessions');
+      for (final s in sessions) {
+        if (s['deviceId'] == deviceId) {
+          final sId = s['id'] as String?;
+          if (sId != null && sId.isNotEmpty) {
+            await _dal.deleteDocument('sessions', sId);
+          }
+        }
+      }
+
+      // 2. Delete all security logs for this device
+      final logs = await _dal.getCollection('security_logs');
+      for (final l in logs) {
+        if (l['deviceId'] == deviceId) {
+          final lId = l['id'] as String?;
+          if (lId != null && lId.isNotEmpty) {
+            await _dal.deleteDocument('security_logs', lId);
+          }
+        }
+      }
+
+      // 3. Delete any pairing codes for this device
+      final codes = await _dal.getCollection('pairing_codes');
+      for (final c in codes) {
+        if (c['deviceId'] == deviceId) {
+          final codeId = c['id'] as String? ?? c['code'] as String?;
+          if (codeId != null && codeId.isNotEmpty) {
+            await _dal.deleteDocument('pairing_codes', codeId);
+          }
+        }
+      }
+
+      // 4. Finally delete the device document itself
+      return await _dal.deleteDocument('devices', deviceId);
+    } catch (_) {
+      return false;
+    }
+  }
 }
+

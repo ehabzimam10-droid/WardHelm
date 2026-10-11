@@ -397,7 +397,6 @@ void main(List<String> args) async {
 
     if (isPaired) {
       guiServer.isPaired = true;
-      timer.cancel();
       return;
     }
 
@@ -446,6 +445,27 @@ void main(List<String> args) async {
           dev,
           currentVersion: AppConstants.appVersion,
         );
+      } else {
+        // Device record is null in Firestore!
+        // If it was paired, it has been unpaired/wiped from the cloud!
+        if (isPaired) {
+          stdout.writeln('\n[UNPAIRED] Device record removed from cloud. Resetting to initial pairing mode for complete privacy.');
+          isPaired = false;
+          guiServer.isPaired = false;
+          guiServer.mode = 'pairing';
+          guiServer.isControlled = false;
+          if (watchdog.isRunning) {
+            watchdog.stopWatchdog();
+            await hostsFirewall.removeDomainBlocks();
+            await hostsFirewall.restoreInternet();
+            await registry.enableTaskManager();
+          }
+          currentCode = '';
+          lastInterval = -1;
+        }
+      }
+
+      if (dev != null) {
 
         // Check for remote commands from dashboard (e.g. check_update)
         if (dev.metadata['pendingCommand'] == 'check_update') {

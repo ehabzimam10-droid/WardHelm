@@ -158,4 +158,20 @@ class AppLocalizations {
   String get language => isArabic ? 'اللغة' : 'Language';
   String get arabic => isArabic ? 'العربية' : 'Arabic';
   String get english => isArabic ? 'English' : 'English';
+
+  // Device Unpairing & Privacy Wiping
+  String get unpairDevice => isArabic ? 'فك ربط الجهاز ومسحه' : 'Unpair & Wipe Device';
+  String get unpairDeviceDesc => isArabic
+      ? 'إنهاء ارتباط هذا الحاسوب بحسابك وحذف جميع سجلاته وبياناته نهائياً لأعلى درجات الخصوصية.'
+      : 'Disconnect this PC and permanently wipe all its sessions and logs for maximum privacy.';
+  String get confirmUnpairTitle => isArabic ? 'تأكيد فك الربط والمسح الشامل' : 'Confirm Unpair & Data Wipe';
+  String get confirmUnpairMsg => isArabic
+      ? 'هل أنت متأكد من فك ربط هذا الجهاز؟ سيتم حذف جميع بيانات الجلسات والسجلات الأمنية نهائياً من السحابة، وسيعود الحاسوب لوضع الربط الأولي.'
+      : 'Are you sure you want to unpair this device? All session data and security logs will be permanently deleted from the cloud, and the PC will return to pairing mode.';
+  String get unpairSuccess => isArabic
+      ? 'تم فك ربط الجهاز ومسح كافة بياناته بنجاح.'
+      : 'Device unpaired and all data wiped successfully.';
+  String get unpairFailed => isArabic
+      ? 'فشل فك ربط الجهاز، يرجى المحاولة مرة أخرى.'
+      : 'Failed to unpair device, please try again.';
 }

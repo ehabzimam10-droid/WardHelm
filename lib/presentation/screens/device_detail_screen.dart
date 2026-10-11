@@ -34,10 +34,58 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
   String _filterMode = 'whitelist';
   List<String> _selectedApps = List.from(AppConstants.defaultRobloxProcesses);
   bool _isUpdatingDevice = false;
+  bool _isUnpairing = false;
 
   void _goBack() {
-    widget.deviceState.deselectDevice();
+    widget.sessionState.stopWatcher();
     widget.appState.navigateTo(AppView.dashboard);
+    widget.deviceState.deselectDevice();
+  }
+
+  Future<void> _handleUnpairDevice(DeviceModel dev, AppLocalizations loc) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: AppColors.danger),
+            const SizedBox(width: 8),
+            Expanded(child: Text(loc.confirmUnpairTitle)),
+          ],
+        ),
+        content: Text(loc.confirmUnpairMsg),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(loc.cancel),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
+            onPressed: () => Navigator.of(context).pop(true),
+            icon: const Icon(Icons.link_off_rounded),
+            label: Text(loc.unpairDevice),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      setState(() => _isUnpairing = true);
+      final success = await widget.deviceState.unpairAndWipeDevice(dev.id);
+      if (!mounted) return;
+      setState(() => _isUnpairing = false);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: success ? AppColors.success : AppColors.danger,
+          content: Text(success ? loc.unpairSuccess : loc.unpairFailed),
+        ),
+      );
+
+      if (success) {
+        _goBack();
+      }
+    }
   }
 
   Future<void> _triggerRemoteUpdate(DeviceModel dev, AppLocalizations loc) async {
@@ -137,6 +185,11 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
           ),
           title: Text(dev.name, style: const TextStyle(fontWeight: FontWeight.bold)),
           actions: [
+            IconButton(
+              icon: const Icon(Icons.link_off_rounded, color: AppColors.danger),
+              tooltip: loc.unpairDevice,
+              onPressed: _isUnpairing ? null : () => _handleUnpairDevice(dev, loc),
+            ),
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 16),
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -176,6 +229,25 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // Clear Top Breadcrumb / Return Action
+              Align(
+                alignment: widget.appState.isArabic ? Alignment.centerRight : Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: _goBack,
+                  icon: Icon(
+                    widget.appState.isArabic
+                        ? Icons.arrow_forward_rounded
+                        : Icons.arrow_back_rounded,
+                    size: 18,
+                  ),
+                  label: Text(
+                    loc.backToDashboard,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+
               // Mode Banner
               Card(
                 child: Padding(
@@ -455,6 +527,78 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
                             ),
                           );
                         }),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Danger Zone: Unpair & Wipe Device
+              Card(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(color: AppColors.danger.withOpacity(0.4), width: 1.2),
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppColors.danger.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(Icons.link_off_rounded, color: AppColors.danger, size: 20),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  loc.unpairDevice,
+                                  style: const TextStyle(
+                                    fontSize: 15,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppColors.danger,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  loc.unpairDeviceDesc,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: AppColors.danger,
+                            side: const BorderSide(color: AppColors.danger),
+                          ),
+                          onPressed: _isUnpairing ? null : () => _handleUnpairDevice(dev, loc),
+                          icon: _isUnpairing
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.danger),
+                                )
+                              : const Icon(Icons.delete_forever_rounded),
+                          label: Text(loc.unpairDevice),
+                        ),
+                      ),
                     ],
                   ),
                 ),
