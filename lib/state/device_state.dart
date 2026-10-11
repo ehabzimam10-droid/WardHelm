@@ -28,7 +28,7 @@ class DeviceState extends ChangeNotifier {
   void startPolling() {
     refreshDevices();
     _pollTimer?.cancel();
-    _pollTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+    _pollTimer = Timer.periodic(const Duration(seconds: 45), (_) {
       if (FirestoreDal.isRateLimited) return;
       refreshDevices(silent: true);
     });

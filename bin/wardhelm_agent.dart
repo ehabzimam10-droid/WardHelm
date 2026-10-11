@@ -39,116 +39,122 @@ void _hideConsoleWindow() {
   } catch (_) {}
 }
 
-/// Embedded PowerShell script content for the native System Tray (Notification Area)
-const String _embeddedTrayScript = r'''
-param(
-  [int]$AgentPid = 0,
-  [string]$IconPath = ""
-)
+/// Converts a Dart string to a UTF-16LE Base64 string for PowerShell's -EncodedCommand
+String _encodePowerShellCommand(String script) {
+  final utf16Units = <int>[];
+  for (final codeUnit in script.codeUnits) {
+    utf16Units.add(codeUnit & 0xFF);
+    utf16Units.add((codeUnit >> 8) & 0xFF);
+  }
+  return base64Encode(utf16Units);
+}
 
-$ErrorActionPreference = "SilentlyContinue"
-$logPath = Join-Path $env:LOCALAPPDATA "WardHelm\tray.log"
+/// Spawns native Windows System Tray helper entirely in memory via PowerShell -EncodedCommand
+void _startSystemTrayIcon() {
+  if (!Platform.isWindows) return;
+  try {
+    final agentPid = pid;
+    final script = '''
+Add-Type -AssemblyName System.Windows.Forms
+Add-Type -AssemblyName System.Drawing
+
+\$notify = New-Object System.Windows.Forms.NotifyIcon
+\$notify.Text = 'WardHelm PC Guardian'
 
 try {
-  Add-Type -AssemblyName System.Windows.Forms
-  Add-Type -AssemblyName System.Drawing
-
-  $notify = New-Object System.Windows.Forms.NotifyIcon
-  # Maximum length in WinForms NotifyIcon is strictly 63 characters
-  $notify.Text = "WardHelm PC Guardian"
-
-  # Load Icon
-  if ($IconPath -and (Test-Path $IconPath)) {
-    try {
-      $notify.Icon = New-Object System.Drawing.Icon($IconPath)
-    } catch {
-      $notify.Icon = [System.Drawing.SystemIcons]::Shield
-    }
-  } else {
-    $notify.Icon = [System.Drawing.SystemIcons]::Shield
-  }
-
-  $contextMenu = New-Object System.Windows.Forms.ContextMenu
-
-  $openItem = New-Object System.Windows.Forms.MenuItem("🛡️ فتح لوحة التحكم (Dashboard)")
-  $openItem.add_Click({
-    try {
-      $edge = "C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"
-      if (-not (Test-Path $edge)) { $edge = "C:\Program Files\Microsoft\Edge\Application\msedge.exe" }
-      if (Test-Path $edge) {
-        Start-Process $edge -ArgumentList "--app=http://127.0.0.1:48123 --window-size=480,720 --app-id=wardhelm_agent_ui"
-      } else {
-        Start-Process "http://127.0.0.1:48123"
-      }
-    } catch {}
-  })
-
-  $updateItem = New-Object System.Windows.Forms.MenuItem("🔄 فحص التحديثات الآن (Check Updates)")
-  $updateItem.add_Click({
-    try {
-      Invoke-RestMethod -Uri "http://127.0.0.1:48123/check_update" -Method Post -TimeoutSec 3 | Out-Null
-      $notify.ShowBalloonTip(3000, "WardHelm", "جارٍ فحص التحديثات السحابية...", [System.Windows.Forms.ToolTipIcon]::Info)
-    } catch {}
-  })
-
-  $statusItem = New-Object System.Windows.Forms.MenuItem("🟢 الحماية نشطة في الخلفية (Active)")
-  $statusItem.Enabled = $false
-
-  $separator = New-Object System.Windows.Forms.MenuItem("-")
-
-  $exitItem = New-Object System.Windows.Forms.MenuItem("❌ إغلاق الحارس تماماً (Exit)")
-  $exitItem.add_Click({
-    try {
-      Invoke-RestMethod -Uri "http://127.0.0.1:48123/exit" -Method Post -TimeoutSec 3 | Out-Null
-    } catch {}
-    $notify.Visible = $false
-    $notify.Dispose()
-    [System.Windows.Forms.Application]::Exit()
-  })
-
-  $contextMenu.MenuItems.Add($openItem) | Out-Null
-  $contextMenu.MenuItems.Add($updateItem) | Out-Null
-  $contextMenu.MenuItems.Add($statusItem) | Out-Null
-  $contextMenu.MenuItems.Add($separator) | Out-Null
-  $contextMenu.MenuItems.Add($exitItem) | Out-Null
-
-  $notify.ContextMenu = $contextMenu
-
-  # Double-click or click to open GUI
-  $notify.add_DoubleClick({
-    $openItem.PerformClick()
-  })
-  $notify.add_Click({
-    if ([System.Windows.Forms.Control]::MouseButtons -eq [System.Windows.Forms.MouseButtons]::Left) {
-      $openItem.PerformClick()
-    }
-  })
-
-  $notify.Visible = $true
-  $notify.ShowBalloonTip(3000, "WardHelm Guardian", "البرنامج يعمل الآن في علبة النظام بجوار الساعة.", [System.Windows.Forms.ToolTipIcon]::Info)
-
-  # Check if Agent process is still alive every 3 seconds
-  $timer = New-Object System.Windows.Forms.Timer
-  $timer.Interval = 3000
-  $timer.add_Tick({
-    if ($AgentPid -gt 0) {
-      $p = Get-Process -Id $AgentPid -ErrorAction SilentlyContinue
-      if (-not $p) {
-        $notify.Visible = $false
-        $notify.Dispose()
-        [System.Windows.Forms.Application]::Exit()
-      }
-    }
-  })
-  $timer.Start()
-
-  [System.Windows.Forms.Application]::Run()
+  \$bytes = [Convert]::FromBase64String('${AppLogoData.logoPngBase64}')
+  \$ms = New-Object System.IO.MemoryStream(,\$bytes)
+  \$bmp = New-Object System.Drawing.Bitmap(\$ms)
+  \$hIcon = \$bmp.GetHicon()
+  \$notify.Icon = [System.Drawing.Icon]::FromHandle(\$hIcon)
 } catch {
-  $_ | Out-File -FilePath $logPath -Append
+  \$notify.Icon = [System.Drawing.SystemIcons]::Shield
 }
+
+\$contextMenu = New-Object System.Windows.Forms.ContextMenu
+
+\$openItem = New-Object System.Windows.Forms.MenuItem('🛡️ فتح لوحة التحكم (Dashboard)')
+\$openItem.add_Click({
+  try {
+    Invoke-RestMethod -Uri 'http://127.0.0.1:48123/open_gui' -Method Post -TimeoutSec 2 | Out-Null
+  } catch {}
+})
+
+\$updateItem = New-Object System.Windows.Forms.MenuItem('🔄 فحص التحديثات الآن (Check Updates)')
+\$updateItem.add_Click({
+  try {
+    Invoke-RestMethod -Uri 'http://127.0.0.1:48123/check_update' -Method Post -TimeoutSec 2 | Out-Null
+  } catch {}
+})
+
+\$statusItem = New-Object System.Windows.Forms.MenuItem('🟢 الحماية نشطة في الخلفية (Active)')
+\$statusItem.Enabled = \$false
+
+\$separator = New-Object System.Windows.Forms.MenuItem('-')
+
+\$exitItem = New-Object System.Windows.Forms.MenuItem('❌ إغلاق الحارس تماماً (Exit)')
+\$exitItem.add_Click({
+  try {
+    Invoke-RestMethod -Uri 'http://127.0.0.1:48123/exit' -Method Post -TimeoutSec 2 | Out-Null
+  } catch {}
+  \$notify.Visible = \$false
+  \$notify.Dispose()
+  [System.Windows.Forms.Application]::Exit()
+})
+
+\$contextMenu.MenuItems.Add(\$openItem) | Out-Null
+\$contextMenu.MenuItems.Add(\$updateItem) | Out-Null
+\$contextMenu.MenuItems.Add(\$statusItem) | Out-Null
+\$contextMenu.MenuItems.Add(\$separator) | Out-Null
+\$contextMenu.MenuItems.Add(\$exitItem) | Out-Null
+
+\$notify.ContextMenu = \$contextMenu
+
+\$notify.add_DoubleClick({ \$openItem.PerformClick() })
+\$notify.add_Click({
+  if ([System.Windows.Forms.Control]::MouseButtons -eq [System.Windows.Forms.MouseButtons]::Left) {
+    \$openItem.PerformClick()
+  }
+})
+
+\$notify.Visible = \$true
+
+# Liveness check: Close tray if Agent process terminates
+\$timer = New-Object System.Windows.Forms.Timer
+\$timer.Interval = 3000
+\$timer.add_Tick({
+  \$p = Get-Process -Id $agentPid -ErrorAction SilentlyContinue
+  if (-not \$p) {
+    \$notify.Visible = \$false
+    \$notify.Dispose()
+    [System.Windows.Forms.Application]::Exit()
+  }
+})
+\$timer.Start()
+
+[System.Windows.Forms.Application]::Run()
 ''';
 
-/// Ensures permanent installation into %LOCALAPPDATA%\WardHelm, extracts icon, creates Start Menu/Desktop shortcuts, and configures auto-startup
+    final encoded = _encodePowerShellCommand(script);
+
+    Process.start(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-STA',
+        '-WindowStyle',
+        'Hidden',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-EncodedCommand',
+        encoded,
+      ],
+      mode: ProcessStartMode.detached,
+    );
+  } catch (_) {}
+}
+
+/// Ensures permanent installation into %LOCALAPPDATA%\\WardHelm, extracts icon, creates Start Menu/Desktop shortcuts, and configures auto-startup
 Future<void> _ensureSelfInstalled() async {
   if (!Platform.isWindows) return;
   try {
@@ -158,12 +164,12 @@ Future<void> _ensureSelfInstalled() async {
       installDir.createSync(recursive: true);
     }
     final permanentExe = File('${installDir.path}\\wardhelm_agent.exe');
-    final icoFile = File('${installDir.path}\\wardhelm_logo.ico');
+    final icoFile = File('${installDir.path}\\wardhelm_logo.png');
 
     // Extract icon file if missing or empty
     if (!icoFile.existsSync() || icoFile.lengthSync() == 0) {
       try {
-        icoFile.writeAsBytesSync(base64Decode(AppLogoData.logoIcoBase64));
+        icoFile.writeAsBytesSync(base64Decode(AppLogoData.logoPngBase64));
       } catch (_) {}
     }
 
@@ -209,44 +215,6 @@ Future<void> _ensureSelfInstalled() async {
       Set-ItemProperty -Path "HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Run" -Name "WardHelm" -Value '"$targetPath"' -ErrorAction SilentlyContinue
       '''
     ]);
-  } catch (_) {}
-}
-
-/// Spawns native Windows System Tray helper in background with UTF-8 BOM and STA threading
-void _startSystemTrayIcon() {
-  if (!Platform.isWindows) return;
-  try {
-    final localAppData = Platform.environment['LOCALAPPDATA'] ?? r'C:\Users\Public';
-    final installDir = Directory('$localAppData\\WardHelm');
-    if (!installDir.existsSync()) {
-      installDir.createSync(recursive: true);
-    }
-    final trayScript = File('${installDir.path}\\wardhelm_tray.ps1');
-    final iconFile = File('${installDir.path}\\wardhelm_logo.ico');
-
-    // Always ensure tray script exists with UTF-8 BOM so PowerShell 5.1 decodes it flawlessly
-    final bomUtf8 = [0xEF, 0xBB, 0xBF, ...utf8.encode(_embeddedTrayScript)];
-    trayScript.writeAsBytesSync(bomUtf8);
-
-    final iconArg = iconFile.existsSync() ? iconFile.path : '';
-
-    Process.start(
-      'powershell.exe',
-      [
-        '-NoProfile',
-        '-STA',
-        '-WindowStyle',
-        'Hidden',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
-        trayScript.path,
-        '-AgentPid',
-        pid.toString(),
-        if (iconArg.isNotEmpty) ...['-IconPath', iconArg],
-      ],
-      mode: ProcessStartMode.detached,
-    );
   } catch (_) {}
 }
 
@@ -362,9 +330,14 @@ void main(List<String> args) async {
     exit(0);
   };
 
-  /// Routine to check and apply auto-updates
-  Future<void> checkAndUpdateAgent({bool silent = false}) async {
-    if (isUpdating) return;
+  /// Routine to check and apply auto-updates returning status map for GUI
+  Future<Map<String, dynamic>> checkAndUpdateAgent({bool silent = false}) async {
+    if (isUpdating) {
+      return {
+        'hasUpdate': true,
+        'message': 'جارٍ بالفعل تنزيل التحديث والتثبيت التلقائي في الخلفية...',
+      };
+    }
     try {
       if (!silent) stdout.writeln('\n[UPDATER] Checking for software updates...');
       final info = await AgentUpdater.checkForUpdates();
@@ -378,22 +351,40 @@ void main(List<String> args) async {
         await hostsFirewall.restoreInternet();
         await registry.enableTaskManager();
 
-        final applied = await AgentUpdater.downloadAndApplyUpdate(info);
-        if (!applied) {
-          isUpdating = false;
-        }
+        // Download and apply asynchronously
+        AgentUpdater.downloadAndApplyUpdate(info);
+
+        return {
+          'hasUpdate': true,
+          'currentVersion': info.currentVersion,
+          'latestVersion': info.latestVersion,
+          'releaseNotes': info.releaseNotes,
+          'message': 'تم العثور على إصدار جديد v${info.latestVersion}! جارٍ التنزيل والتثبيت التلقائي الآن...',
+        };
       } else {
         if (!silent) stdout.writeln('[UPDATER] You are on the latest version (v${info.currentVersion}).');
+        return {
+          'hasUpdate': false,
+          'currentVersion': info.currentVersion,
+          'latestVersion': info.latestVersion,
+          'message': 'أنت تستخدم أحدث إصدار بالفعل (v${info.currentVersion}).',
+        };
       }
     } catch (e) {
       if (!silent) stderr.writeln('[UPDATER] Check error: $e');
+      return {
+        'hasUpdate': false,
+        'currentVersion': AppConstants.appVersion,
+        'latestVersion': AppConstants.appVersion,
+        'message': 'تعذر فحص التحديثات: $e',
+      };
     }
   }
 
-  guiServer.onCheckUpdateRequested = () => checkAndUpdateAgent(silent: false);
+  guiServer.onCheckUpdateWithResult = () => checkAndUpdateAgent(silent: false);
 
   // Initial update check at launch
-  checkAndUpdateAgent(silent: false);
+  checkAndUpdateAgent(silent: true);
 
   // Periodic automatic update check every 30 minutes
   Timer.periodic(const Duration(minutes: 30), (_) => checkAndUpdateAgent(silent: true));
@@ -414,8 +405,8 @@ void main(List<String> args) async {
     }
   });
 
-  // Re-scan apps every 10 minutes
-  Timer.periodic(const Duration(minutes: 10), (_) async {
+  // Re-scan apps every 30 minutes to minimize cloud operations
+  Timer.periodic(const Duration(minutes: 30), (_) async {
     final apps = await _scanInstalledApplications();
     final dev = await deviceService.getDevice(deviceId);
     if (dev != null) {
@@ -456,9 +447,9 @@ void main(List<String> args) async {
     }
   });
 
-  // Main 12-second agent sync loop
+  // Main agent sync loop: 30 seconds to conserve daily Firestore read quotas
   int agentHeartbeatCounter = 0;
-  Timer.periodic(const Duration(seconds: 12), (_) async {
+  Timer.periodic(const Duration(seconds: 30), (_) async {
     if (isUpdating) return;
 
     try {

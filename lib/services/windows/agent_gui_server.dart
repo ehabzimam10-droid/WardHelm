@@ -19,7 +19,8 @@ class AgentGuiServer {
   int sessionMinutesLeft = 0;
   bool isPrayerPause = false;
   bool isInternetBlocked = false;
-  Future<void> Function()? onCheckUpdateRequested;
+
+  Future<Map<String, dynamic>> Function()? onCheckUpdateWithResult;
   Future<void> Function()? onExitRequested;
 
   AgentGuiServer({this.port = 48123});
@@ -76,8 +77,17 @@ class AgentGuiServer {
 
         if (path == '/check_update' && request.method == 'POST') {
           request.response.headers.contentType = ContentType.json;
-          onCheckUpdateRequested?.call();
-          request.response.write(json.encode({'status': 'triggered'}));
+          if (onCheckUpdateWithResult != null) {
+            final result = await onCheckUpdateWithResult!.call();
+            request.response.write(json.encode(result));
+          } else {
+            request.response.write(json.encode({
+              'hasUpdate': false,
+              'currentVersion': AppConstants.appVersion,
+              'latestVersion': AppConstants.appVersion,
+              'message': 'أنت تستخدم أحدث إصدار بالفعل (v${AppConstants.appVersion}).',
+            }));
+          }
           await request.response.close();
           return;
         }
@@ -90,7 +100,7 @@ class AgentGuiServer {
           return;
         }
 
-        // Serve Beautiful Embedded Fluent Obsidian Dark Kiosk GUI
+        // Serve Beautiful Embedded Acrylic Obsidian Native Desktop GUI
         request.response.headers.contentType = ContentType.html;
         request.response.write(_buildHtmlTemplate());
         await request.response.close();
@@ -135,6 +145,8 @@ class AgentGuiServer {
               '--app=http://127.0.0.1:$port',
               '--window-size=480,720',
               '--app-id=wardhelm_agent_ui',
+              '--disable-extensions',
+              '--disable-plugins',
             ],
             mode: ProcessStartMode.detached,
           );
@@ -162,18 +174,26 @@ class AgentGuiServer {
   <link rel="icon" type="image/png" href="/logo.png">
   <style>
     :root {
-      --bg: #0d1117;
-      --card-bg: #161b22;
-      --border: #30363d;
-      --primary: #4f46e5;
-      --primary-hover: #4338ca;
-      --text: #f0f6fc;
-      --text-muted: #8b949e;
+      --bg: #090d16;
+      --card-bg: #111827;
+      --card-border: rgba(255, 255, 255, 0.08);
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --text: #f9fafb;
+      --text-muted: #9ca3af;
       --success: #10b981;
       --warning: #f59e0b;
       --danger: #ef4444;
+      --surface-glass: rgba(17, 24, 39, 0.85);
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-user-drag: none;
+    }
     body {
       background-color: var(--bg);
       color: var(--text);
@@ -183,61 +203,83 @@ class AgentGuiServer {
       align-items: center;
       justify-content: center;
       min-height: 100vh;
-      padding: 24px;
+      padding: 20px;
       overflow-x: hidden;
+      background-image: radial-gradient(circle at 50% 0%, rgba(59, 130, 246, 0.12) 0%, transparent 60%);
     }
-    .container {
-      background: var(--card-bg);
-      border: 1px solid var(--border);
+
+    /* Native App Window Container */
+    .app-window {
+      background: var(--surface-glass);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--card-border);
       border-radius: 24px;
       width: 100%;
-      max-width: 430px;
-      padding: 32px 28px;
-      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+      max-width: 440px;
+      padding: 30px 24px 26px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.65), 0 0 0 1px rgba(255, 255, 255, 0.05);
       text-align: center;
       position: relative;
     }
-    .header {
+
+    .window-header {
       display: flex;
       flex-direction: column;
       align-items: center;
-      margin-bottom: 24px;
+      margin-bottom: 20px;
     }
-    .shield-badge {
-      width: 64px;
-      height: 64px;
-      border-radius: 50%;
-      background: rgba(79, 70, 229, 0.15);
-      border: 1px solid rgba(79, 70, 229, 0.3);
-      display: flex;
-      align-items: center;
-      justify-content: center;
+    .logo-glow {
+      position: relative;
       margin-bottom: 12px;
-      color: var(--primary);
     }
-    h1 { font-size: 24px; font-weight: 800; letter-spacing: 0.5px; }
-    .subtitle { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
-    
+    .logo-img {
+      width: 80px;
+      height: 80px;
+      object-fit: contain;
+      filter: drop-shadow(0 8px 24px rgba(59, 130, 246, 0.5));
+      animation: pulseGlow 4s ease-in-out infinite alternate;
+    }
+    @keyframes pulseGlow {
+      from { filter: drop-shadow(0 6px 16px rgba(59, 130, 246, 0.35)); }
+      to { filter: drop-shadow(0 10px 30px rgba(59, 130, 246, 0.65)); }
+    }
+
+    h1 {
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      background: linear-gradient(135deg, #ffffff 0%, #93c5fd 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .subtitle {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 4px;
+      font-weight: 500;
+    }
+
     /* Circular Timer */
     .timer-box {
       position: relative;
-      width: 180px;
-      height: 180px;
-      margin: 20px auto;
+      width: 170px;
+      height: 170px;
+      margin: 16px auto;
       display: flex;
       align-items: center;
       justify-content: center;
     }
-    .svg-ring { transform: rotate(-90deg); width: 180px; height: 180px; }
+    .svg-ring { transform: rotate(-90deg); width: 170px; height: 170px; }
     .svg-ring circle {
       fill: none;
-      stroke-width: 10;
+      stroke-width: 9;
       stroke-linecap: round;
     }
-    .ring-bg { stroke: rgba(255, 255, 255, 0.08); }
+    .ring-bg { stroke: rgba(255, 255, 255, 0.06); }
     .ring-progress {
       stroke: var(--primary);
-      stroke-dasharray: 471;
+      stroke-dasharray: 446;
       stroke-dashoffset: 0;
       transition: stroke-dashoffset 0.8s linear, stroke 0.3s;
     }
@@ -247,31 +289,35 @@ class AgentGuiServer {
       flex-direction: column;
       align-items: center;
     }
-    .timer-sec { font-size: 32px; font-weight: 800; }
-    .timer-label { font-size: 11px; color: var(--text-muted); text-transform: uppercase; }
+    .timer-sec { font-size: 34px; font-weight: 800; color: #fff; line-height: 1; }
+    .timer-label { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
 
     /* Pairing Code Box */
     .code-box {
-      background: rgba(0, 0, 0, 0.3);
-      border: 1px solid var(--border);
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.08);
       border-radius: 16px;
       padding: 16px 20px;
-      margin: 20px 0 16px;
+      margin: 16px 0;
       display: flex;
       flex-direction: column;
       align-items: center;
       cursor: pointer;
-      transition: all 0.2s;
+      transition: all 0.2s ease;
     }
-    .code-box:hover { border-color: var(--primary); transform: translateY(-1px); }
-    .code-title { font-size: 11px; color: var(--text-muted); margin-bottom: 6px; }
+    .code-box:hover {
+      border-color: rgba(59, 130, 246, 0.4);
+      background: rgba(59, 130, 246, 0.05);
+      transform: translateY(-1px);
+    }
+    .code-title { font-size: 11px; color: var(--text-muted); margin-bottom: 6px; font-weight: 600; }
     .code-val {
       font-size: 28px;
       font-weight: 900;
       letter-spacing: 4px;
       color: #60a5fa;
       direction: ltr;
-      font-family: Consolas, monospace;
+      font-family: Consolas, "Courier New", monospace;
     }
     .copy-hint { font-size: 11px; color: var(--text-muted); margin-top: 6px; }
 
@@ -284,8 +330,8 @@ class AgentGuiServer {
       flex-wrap: wrap;
     }
     .badge {
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.07);
       padding: 6px 12px;
       border-radius: 10px;
       font-size: 12px;
@@ -295,15 +341,16 @@ class AgentGuiServer {
       gap: 6px;
     }
     .badge strong { color: var(--text); }
-    .badge-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); }
+    .badge-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); box-shadow: 0 0 8px var(--success); }
 
     /* Paired State */
     .paired-card { display: none; text-align: center; padding: 20px 0; }
     .paired-icon {
-      width: 72px;
-      height: 72px;
+      width: 68px;
+      height: 68px;
       border-radius: 50%;
-      background: rgba(16, 185, 129, 0.15);
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.25);
       color: var(--success);
       display: flex;
       align-items: center;
@@ -314,30 +361,125 @@ class AgentGuiServer {
     .paired-desc { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
 
     /* Controlled Session State */
-    .session-card { display: none; margin: 16px 0; padding: 16px; background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: 14px; }
+    .session-card {
+      display: none;
+      margin: 16px 0;
+      padding: 16px;
+      background: rgba(245, 158, 11, 0.08);
+      border: 1px solid rgba(245, 158, 11, 0.25);
+      border-radius: 16px;
+    }
     .session-title { color: var(--warning); font-weight: bold; font-size: 14px; margin-bottom: 4px; }
-    .session-time { font-size: 24px; font-weight: 800; color: #fff; }
+    .session-time { font-size: 26px; font-weight: 800; color: #fff; }
 
-    /* Buttons */
+    /* Native Buttons */
     .btn-update {
-      background: transparent;
-      border: 1px solid var(--border);
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
       color: var(--text-muted);
-      padding: 8px 16px;
-      border-radius: 10px;
-      font-size: 12px;
+      padding: 10px 18px;
+      border-radius: 12px;
+      font-size: 13px;
+      font-weight: 600;
       cursor: pointer;
       margin-top: 20px;
       transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
     }
-    .btn-update:hover { border-color: var(--primary); color: #fff; }
+    .btn-update:hover {
+      border-color: var(--primary);
+      color: #fff;
+      background: rgba(59, 130, 246, 0.15);
+      transform: translateY(-1px);
+    }
+
+    /* Native In-App Acrylic Modal Dialog */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.65);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+      z-index: 999;
+    }
+    .modal-overlay.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .modal-card {
+      background: #131b2e;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 20px;
+      width: 100%;
+      max-width: 380px;
+      padding: 24px;
+      text-align: center;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.8);
+      transform: scale(0.95);
+      transition: transform 0.25s ease;
+    }
+    .modal-overlay.active .modal-card {
+      transform: scale(1);
+    }
+    .modal-icon {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 16px;
+      font-size: 24px;
+    }
+    .modal-title { font-size: 17px; font-weight: 800; color: #fff; margin-bottom: 8px; }
+    .modal-body { font-size: 13px; color: var(--text-muted); line-height: 1.5; margin-bottom: 20px; }
+    .modal-btn {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      padding: 10px 24px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .modal-btn:hover { background: var(--primary-hover); }
+
+    /* Spinner */
+    .spinner {
+      width: 28px;
+      height: 28px;
+      border: 3px solid rgba(255, 255, 255, 0.15);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 14px;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
   </style>
 </head>
-<body>
+<body oncontextmenu="return false;">
 
-<div class="container">
-  <div class="header">
-    <img src="/logo.png" width="76" height="76" alt="WardHelm Logo" style="margin-bottom: 12px; filter: drop-shadow(0 6px 18px rgba(96, 165, 250, 0.45)); object-fit: contain;">
+<div class="app-window">
+  <div class="window-header">
+    <div class="logo-glow">
+      <img src="/logo.png" class="logo-img" alt="WardHelm Logo">
+    </div>
     <h1>WardHelm</h1>
     <div class="subtitle" id="subTitle">حارس الحاسوب الذكي وإدارة الجلسات</div>
   </div>
@@ -346,8 +488,8 @@ class AgentGuiServer {
   <div id="unpairedSection">
     <div class="timer-box">
       <svg class="svg-ring">
-        <circle class="ring-bg" cx="90" cy="90" r="75"></circle>
-        <circle id="ringProgress" class="ring-progress" cx="90" cy="90" r="75"></circle>
+        <circle class="ring-bg" cx="85" cy="85" r="71"></circle>
+        <circle id="ringProgress" class="ring-progress" cx="85" cy="85" r="71"></circle>
       </svg>
       <div class="timer-text">
         <span class="timer-sec" id="timerSec">60</span>
@@ -365,7 +507,7 @@ class AgentGuiServer {
   <!-- Paired Section (Owner Mode) -->
   <div class="paired-card" id="pairedSection">
     <div class="paired-icon">
-      <svg width="36" height="36" viewBox="0 0 24 24" fill="currentColor">
+      <svg width="34" height="34" viewBox="0 0 24 24" fill="currentColor">
         <path d="M9 16.17L4.83 12L3.41 13.41L9 19L21 7L19.59 5.59L9 16.17Z"/>
       </svg>
     </div>
@@ -387,15 +529,35 @@ class AgentGuiServer {
   <div class="badges">
     <div class="badge"><span class="badge-dot"></span> متصل بالسحابة</div>
     <div class="badge">الجهاز: <strong id="devName">...</strong></div>
-    <div class="badge">الإصدار: <strong id="verNum">v1.0.0</strong></div>
+    <div class="badge">الإصدار: <strong id="verNum">v1.0.7</strong></div>
   </div>
 
-  <button class="btn-update" onclick="checkUpdate()">فحص التحديثات الآن 🔄</button>
+  <button class="btn-update" id="btnUpdate" onclick="checkUpdate()">
+    <span>🔄</span>
+    <span>فحص التحديثات الآن</span>
+  </button>
+</div>
+
+<!-- Native Acrylic In-App Modal Dialog (Zero Browser Alerts) -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal-card">
+    <div id="modalLoading" style="display: none;">
+      <div class="spinner"></div>
+      <div class="modal-title">جارٍ فحص التحديثات...</div>
+      <div class="modal-body">يتم الاتصال بالخادم السحابي للتحقق من أحدث إصدار معتمد.</div>
+    </div>
+    <div id="modalContent">
+      <div class="modal-icon" id="modalIcon">🛡️</div>
+      <div class="modal-title" id="modalTitle">حالة التحديث</div>
+      <div class="modal-body" id="modalBody">رسالة التحديث...</div>
+      <button class="modal-btn" onclick="closeModal()">حسناً</button>
+    </div>
+  </div>
 </div>
 
 <script>
   let lastCode = '';
-  const circumference = 2 * Math.PI * 75; // 471.23
+  const circumference = 2 * Math.PI * 71; // ~446
 
   async function updateStatus() {
     try {
@@ -419,7 +581,7 @@ class AgentGuiServer {
         if (data.remaining <= 10) {
           document.getElementById('ringProgress').style.stroke = '#ef4444';
         } else {
-          document.getElementById('ringProgress').style.stroke = '#4f46e5';
+          document.getElementById('ringProgress').style.stroke = '#3b82f6';
         }
       } else {
         document.getElementById('unpairedSection').style.display = 'none';
@@ -445,12 +607,57 @@ class AgentGuiServer {
     }, 2500);
   }
 
-  async function checkUpdate() {
-    alert('جارٍ فحص التحديثات عبر السحابة...');
-    await fetch('/check_update', { method: 'POST' });
+  // Native In-App Acrylic Dialog (Never calls browser alert)
+  function showModal(icon, title, body, bg) {
+    document.getElementById('modalLoading').style.display = 'none';
+    document.getElementById('modalContent').style.display = 'block';
+    const iconEl = document.getElementById('modalIcon');
+    iconEl.innerText = icon;
+    iconEl.style.background = bg || 'rgba(59, 130, 246, 0.15)';
+    document.getElementById('modalTitle').innerText = title;
+    document.getElementById('modalBody').innerText = body;
+    document.getElementById('modalOverlay').classList.add('active');
   }
 
-  // Poll status every 800ms
+  function closeModal() {
+    document.getElementById('modalOverlay').classList.remove('active');
+  }
+
+  async function checkUpdate() {
+    document.getElementById('modalContent').style.display = 'none';
+    document.getElementById('modalLoading').style.display = 'block';
+    document.getElementById('modalOverlay').classList.add('active');
+
+    try {
+      const res = await fetch('/check_update', { method: 'POST' });
+      const data = await res.json();
+
+      if (data.hasUpdate) {
+        showModal(
+          '🚀',
+          'تم العثور على تحديث جديد: v' + data.latestVersion,
+          data.message || 'جارٍ تنزيل التحديث وتثبيته تلقائياً في الخلفية...',
+          'rgba(16, 185, 129, 0.2)'
+        );
+      } else {
+        showModal(
+          '✅',
+          'أنت على أحدث إصدار بالفعل',
+          'البرنامج يعمل بالإصدار v' + data.currentVersion + ' وجميع ملفات الحماية ومحرك المراقبة محدثة لأحدث نسخة معتمدة.',
+          'rgba(16, 185, 129, 0.15)'
+        );
+      }
+    } catch (e) {
+      showModal(
+        '⚠️',
+        'تعذر فحص التحديثات',
+        'يرجى التأكد من اتصال الإنترنت ثم المحاولة مرة أخرى.',
+        'rgba(239, 68, 68, 0.15)'
+      );
+    }
+  }
+
+  // Poll local status every 800ms
   setInterval(updateStatus, 800);
   updateStatus();
 </script>
