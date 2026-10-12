@@ -1,5 +1,5 @@
 {
-  "version": "1.0.7",
-  "downloadUrl": "https://github.com/ehabzimam10-droid/WardHelm/releases/download/v1.0.7/wardhelm_agent.exe",
-  "releaseNotes": "v1.0.7: تفعيل التحديث التلقائي الذكي بدون تحميل يدوي، تشغيل أيقونة علبة النظام من الذاكرة مباشرة بترميز Base64 بدون أي ملفات خارجية، تقليص استهلاك قاعدة بيانات Firebase بنسبة 85% لحماية الحصة اليومية، وإزالة كافة تنبيهات المتصفح وإضفاء الطابع الأصلي للويندوز."
+  "version": "1.0.8",
+  "downloadUrl": "https://github.com/ehabzimam10-droid/WardHelm/releases/download/v1.0.8/wardhelm_agent.exe",
+  "releaseNotes": "v1.0.8: إصلاح مشكلة بدء التشغيل الفوري ومنع انهيار الخادم المحلي (ERR_CONNECTION_REFUSED)، تشغيل أيقونة علبة النظام بنمط خفيف ومضمون 100%، وتأكيد ظهور الشعار وواجهة التطبيق المكتبي."
 }

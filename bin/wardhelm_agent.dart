@@ -50,7 +50,7 @@ String _encodePowerShellCommand(String script) {
 }
 
 /// Spawns native Windows System Tray helper entirely in memory via PowerShell -EncodedCommand
-void _startSystemTrayIcon() {
+Future<void> _startSystemTrayIcon() async {
   if (!Platform.isWindows) return;
   try {
     final agentPid = pid;
@@ -61,13 +61,16 @@ Add-Type -AssemblyName System.Drawing
 \$notify = New-Object System.Windows.Forms.NotifyIcon
 \$notify.Text = 'WardHelm PC Guardian'
 
-try {
-  \$bytes = [Convert]::FromBase64String('${AppLogoData.logoPngBase64}')
-  \$ms = New-Object System.IO.MemoryStream(,\$bytes)
-  \$bmp = New-Object System.Drawing.Bitmap(\$ms)
-  \$hIcon = \$bmp.GetHicon()
-  \$notify.Icon = [System.Drawing.Icon]::FromHandle(\$hIcon)
-} catch {
+\$iconPath = Join-Path \$env:LOCALAPPDATA 'WardHelm\\wardhelm_logo.png'
+if (Test-Path \$iconPath) {
+  try {
+    \$bmp = New-Object System.Drawing.Bitmap(\$iconPath)
+    \$hIcon = \$bmp.GetHicon()
+    \$notify.Icon = [System.Drawing.Icon]::FromHandle(\$hIcon)
+  } catch {
+    \$notify.Icon = [System.Drawing.SystemIcons]::Shield
+  }
+} else {
   \$notify.Icon = [System.Drawing.SystemIcons]::Shield
 }
 
@@ -137,7 +140,7 @@ try {
 
     final encoded = _encodePowerShellCommand(script);
 
-    Process.start(
+    await Process.start(
       'powershell.exe',
       [
         '-NoProfile',
@@ -151,7 +154,9 @@ try {
       ],
       mode: ProcessStartMode.detached,
     );
-  } catch (_) {}
+  } catch (e) {
+    stderr.writeln('[TRAY] Failed to start system tray helper: $e');
+  }
 }
 
 /// Ensures permanent installation into %LOCALAPPDATA%\\WardHelm, extracts icon, creates Start Menu/Desktop shortcuts, and configures auto-startup
@@ -288,7 +293,7 @@ void main(List<String> args) async {
   } catch (_) {}
 
   // 3. Autonomous self-installation of shortcuts and registry run key
-  _ensureSelfInstalled();
+  await _ensureSelfInstalled();
 
   stdout.writeln('====================================================');
   stdout.writeln('  🛡️  WardHelm Autonomous Windows Security Agent    ');
@@ -319,7 +324,7 @@ void main(List<String> args) async {
   guiServer.launchWindow();
 
   // Start background System Tray (Notification Area) Icon
-  _startSystemTrayIcon();
+  await _startSystemTrayIcon();
 
   guiServer.onExitRequested = () async {
     stdout.writeln('[SHUTDOWN] Exit requested from System Tray. Restoring policies...');
