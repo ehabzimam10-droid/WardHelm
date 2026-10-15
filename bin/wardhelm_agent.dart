@@ -49,7 +49,8 @@ Future<void> _startSystemTrayIcon() async {
       installDir.createSync(recursive: true);
     }
     final ps1File = File('${installDir.path}\\wardhelm_tray.ps1');
-    final icoFile = File('${installDir.path}\\wardhelm_logo.ico');
+    final ico32File = File('${installDir.path}\\wardhelm_logo_32.ico');
+    final ico16File = File('${installDir.path}\\wardhelm_logo_16.ico');
     final pngFile = File('${installDir.path}\\wardhelm_logo.png');
 
     final agentPid = pid;
@@ -62,20 +63,33 @@ Add-Type -AssemblyName System.Drawing
 \$notify = New-Object System.Windows.Forms.NotifyIcon
 \$notify.Text = 'WardHelm PC Guardian'
 
-\$icoPath = '${icoFile.path.replaceAll("'", "''")}'
+\$ico32Path = '${ico32File.path.replaceAll("'", "''")}'
+\$ico16Path = '${ico16File.path.replaceAll("'", "''")}'
 \$pngPath = '${pngFile.path.replaceAll("'", "''")}'
 
-if (Test-Path \$icoPath) {
+if (Test-Path \$ico32Path) {
   try {
-    \$notify.Icon = New-Object System.Drawing.Icon(\$icoPath)
+    \$notify.Icon = New-Object System.Drawing.Icon(\$ico32Path)
+  } catch {
+    \$notify.Icon = [System.Drawing.SystemIcons]::Shield
+  }
+} elseif (Test-Path \$ico16Path) {
+  try {
+    \$notify.Icon = New-Object System.Drawing.Icon(\$ico16Path)
   } catch {
     \$notify.Icon = [System.Drawing.SystemIcons]::Shield
   }
 } elseif (Test-Path \$pngPath) {
   try {
-    \$bmp = New-Object System.Drawing.Bitmap(\$pngPath)
-    \$hIcon = \$bmp.GetHicon()
-    \$notify.Icon = [System.Drawing.Icon]::FromHandle(\$hIcon)
+    \$src = New-Object System.Drawing.Bitmap(\$pngPath)
+    \$small = New-Object System.Drawing.Bitmap(32, 32)
+    \$g = [System.Drawing.Graphics]::FromImage(\$small)
+    \$g.DrawImage(\$src, 0, 0, 32, 32)
+    \$g.Dispose()
+    \$h = \$small.GetHicon()
+    \$notify.Icon = [System.Drawing.Icon]::FromHandle(\$h)
+    \$small.Dispose()
+    \$src.Dispose()
   } catch {
     \$notify.Icon = [System.Drawing.SystemIcons]::Shield
   }
@@ -130,6 +144,13 @@ if (Test-Path \$icoPath) {
 })
 
 \$notify.Visible = \$true
+
+try {
+  \$notify.BalloonTipTitle = 'WardHelm PC Guardian'
+  \$notify.BalloonTipText = 'درع الحماية نشط ويعمل في علبة النظام (بجانب الساعة).'
+  \$notify.BalloonTipIcon = [System.Windows.Forms.ToolTipIcon]::Info
+  \$notify.ShowBalloonTip(3000)
+} catch {}
 
 # Liveness check: Close tray if Agent process terminates
 \$timer = New-Object System.Windows.Forms.Timer
@@ -193,8 +214,11 @@ Future<void> _ensureSelfInstalled() async {
       } catch (_) {}
     }
 
-    // Generate real Windows .ICO file for shortcuts and System Tray if missing
-    if (!icoFile.existsSync() || icoFile.lengthSync() == 0) {
+    final ico32File = File('${installDir.path}\\wardhelm_logo_32.ico');
+    final ico16File = File('${installDir.path}\\wardhelm_logo_16.ico');
+
+    // Generate real Windows .ICO files (256 for shortcuts, 32 & 16 for System Tray) if missing
+    if (!icoFile.existsSync() || !ico32File.existsSync() || !ico16File.existsSync()) {
       try {
         Process.runSync('powershell.exe', [
           '-NoProfile',
@@ -202,15 +226,51 @@ Future<void> _ensureSelfInstalled() async {
           '''
           Add-Type -AssemblyName System.Drawing
           \$png = "${pngFile.path}"
-          \$ico = "${icoFile.path}"
+          \$ico256 = "${icoFile.path}"
+          \$ico32 = "${ico32File.path}"
+          \$ico16 = "${ico16File.path}"
           if (Test-Path \$png) {
             \$b = New-Object System.Drawing.Bitmap(\$png)
-            \$h = \$b.GetHicon()
-            \$i = [System.Drawing.Icon]::FromHandle(\$h)
-            \$fs = New-Object System.IO.FileStream(\$ico, [System.IO.FileMode]::Create)
-            \$i.Save(\$fs)
-            \$fs.Close()
-            \$i.Dispose()
+            
+            if (-not (Test-Path \$ico256)) {
+              \$h256 = \$b.GetHicon()
+              \$i256 = [System.Drawing.Icon]::FromHandle(\$h256)
+              \$fs = New-Object System.IO.FileStream(\$ico256, [System.IO.FileMode]::Create)
+              \$i256.Save(\$fs)
+              \$fs.Close()
+              \$i256.Dispose()
+            }
+
+            if (-not (Test-Path \$ico32)) {
+              \$s32 = New-Object System.Drawing.Bitmap(32, 32)
+              \$g32 = [System.Drawing.Graphics]::FromImage(\$s32)
+              \$g32.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+              \$g32.DrawImage(\$b, 0, 0, 32, 32)
+              \$g32.Dispose()
+              \$h32 = \$s32.GetHicon()
+              \$i32 = [System.Drawing.Icon]::FromHandle(\$h32)
+              \$fs32 = New-Object System.IO.FileStream(\$ico32, [System.IO.FileMode]::Create)
+              \$i32.Save(\$fs32)
+              \$fs32.Close()
+              \$i32.Dispose()
+              \$s32.Dispose()
+            }
+
+            if (-not (Test-Path \$ico16)) {
+              \$s16 = New-Object System.Drawing.Bitmap(16, 16)
+              \$g16 = [System.Drawing.Graphics]::FromImage(\$s16)
+              \$g16.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+              \$g16.DrawImage(\$b, 0, 0, 16, 16)
+              \$g16.Dispose()
+              \$h16 = \$s16.GetHicon()
+              \$i16 = [System.Drawing.Icon]::FromHandle(\$h16)
+              \$fs16 = New-Object System.IO.FileStream(\$ico16, [System.IO.FileMode]::Create)
+              \$i16.Save(\$fs16)
+              \$fs16.Close()
+              \$i16.Dispose()
+              \$s16.Dispose()
+            }
+
             \$b.Dispose()
           }
           '''
