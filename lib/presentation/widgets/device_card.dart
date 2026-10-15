@@ -89,7 +89,7 @@ class DeviceCard extends StatelessWidget {
                       '${device.os} • $onlineText',
                       style: TextStyle(
                         fontSize: 12,
-                        color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                        color: isDark ? AppColors.darkTextMuted : AppColors.lightTextSecondary,
                       ),
                     ),
                   ],
@@ -123,7 +123,7 @@ class DeviceCard extends StatelessWidget {
               const SizedBox(width: 8),
               Icon(
                 isRtl ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
-                color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                color: isDark ? AppColors.darkTextMuted : AppColors.lightTextSecondary,
               ),
             ],
           ),

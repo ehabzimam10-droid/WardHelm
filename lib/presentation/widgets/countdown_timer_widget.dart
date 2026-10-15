@@ -27,6 +27,8 @@ class CountdownTimerWidget extends StatelessWidget {
       statusColor = AppColors.warning;
     }
 
+    final isRtl = Directionality.of(context) == TextDirection.rtl;
+
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -48,7 +50,9 @@ class CountdownTimerWidget extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    isPrayerPause ? 'استراحة الصلاة (موقوف مؤقتاً)' : 'الوقت المتبقي',
+                    isPrayerPause
+                        ? (isRtl ? 'استراحة الصلاة (موقوف مؤقتاً)' : 'Prayer Pause (Paused)')
+                        : (isRtl ? 'الوقت المتبقي' : 'Time Remaining'),
                     style: TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -64,13 +68,15 @@ class CountdownTimerWidget extends StatelessWidget {
                     isPrayerPause ? Icons.play_arrow_rounded : Icons.pause_rounded,
                     color: statusColor,
                   ),
-                  tooltip: isPrayerPause ? 'استئناف' : 'إيقاف للصلاة',
+                  tooltip: isPrayerPause
+                      ? (isRtl ? 'استئناف الجلسة' : 'Resume Session')
+                      : (isRtl ? 'إيقاف للصلاة' : 'Pause for Prayer'),
                 ),
             ],
           ),
           const SizedBox(height: 12),
           Text(
-            '$remainingMinutes دقيقة',
+            isRtl ? '$remainingMinutes دقيقة' : '$remainingMinutes min',
             style: TextStyle(
               fontSize: 36,
               fontWeight: FontWeight.w800,

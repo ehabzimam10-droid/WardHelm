@@ -14,13 +14,17 @@ class ThemeToggleButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isRtl = Directionality.of(context) == TextDirection.rtl;
+
     return IconButton(
       onPressed: onToggle,
       icon: Icon(
         isDarkMode ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
         color: isDarkMode ? AppColors.warning : AppColors.primary,
       ),
-      tooltip: isDarkMode ? 'التحويل للوضع النهاري' : 'التحويل للوضع الليلي',
+      tooltip: isDarkMode
+          ? (isRtl ? 'التحويل للوضع الفاتح' : 'Switch to Light Mode')
+          : (isRtl ? 'التحويل للوضع الداكن' : 'Switch to Dark Mode'),
     );
   }
 }

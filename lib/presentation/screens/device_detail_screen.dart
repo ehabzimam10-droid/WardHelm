@@ -287,7 +287,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
                               isControlled ? loc.controlledModeDesc : loc.ownerModeDesc,
                               style: TextStyle(
                                 fontSize: 12,
-                                color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                                color: isDark ? AppColors.darkTextMuted : AppColors.lightTextSecondary,
                               ),
                             ),
                           ],
@@ -417,7 +417,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
                                       : 'Remote fleet version control & automatic update',
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                                    color: isDark ? AppColors.darkTextMuted : AppColors.lightTextSecondary,
                                   ),
                                 ),
                               ],
@@ -500,7 +500,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
                             child: Text(
                               loc.noLogs,
                               style: TextStyle(
-                                color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                                color: isDark ? AppColors.darkTextMuted : AppColors.lightTextSecondary,
                                 fontSize: 13,
                               ),
                             ),
@@ -578,7 +578,7 @@ class _DeviceDetailScreenState extends State<DeviceDetailScreen> {
                                   loc.unpairDeviceDesc,
                                   style: TextStyle(
                                     fontSize: 12,
-                                    color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                                    color: isDark ? AppColors.darkTextMuted : AppColors.lightTextSecondary,
                                   ),
                                 ),
                               ],

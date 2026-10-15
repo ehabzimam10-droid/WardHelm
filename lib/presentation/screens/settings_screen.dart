@@ -161,7 +161,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 'One-Click In-App Auto-Updater',
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                                  color: isDark ? AppColors.darkTextMuted : AppColors.lightTextSecondary,
                                 ),
                               ),
                             ],

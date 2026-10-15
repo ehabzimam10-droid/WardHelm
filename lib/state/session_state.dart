@@ -26,7 +26,7 @@ class SessionState extends ChangeNotifier {
     loadSession(sessionId);
     loadLogs(deviceId);
     _syncTimer?.cancel();
-    _syncTimer = Timer.periodic(const Duration(seconds: 45), (_) {
+    _syncTimer = Timer.periodic(const Duration(seconds: 60), (_) {
       if (FirestoreDal.isRateLimited) return;
       loadSession(sessionId, silent: true);
     });

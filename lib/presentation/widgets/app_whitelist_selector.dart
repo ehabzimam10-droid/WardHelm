@@ -363,7 +363,10 @@ class _SmartAppSelectorState extends State<SmartAppSelector> {
             alignment: Alignment.center,
             child: Text(
               loc.noAppsFound,
-              style: const TextStyle(fontSize: 13, color: AppColors.darkTextMuted),
+              style: TextStyle(
+                fontSize: 13,
+                color: isDark ? AppColors.darkTextMuted : AppColors.lightTextSecondary,
+              ),
             ),
           )
         else
@@ -507,7 +510,7 @@ class _SmartAppSelectorState extends State<SmartAppSelector> {
           style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w600,
-            color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+            color: isDark ? AppColors.darkTextSecondary : AppColors.lightTextSecondary,
           ),
         ),
       ),

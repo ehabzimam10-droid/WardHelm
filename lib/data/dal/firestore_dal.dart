@@ -39,7 +39,7 @@ class FirestoreDal {
   void _handleStatusCode(int code, [String? body]) {
     lastStatusCode = code;
     if (code == 429) {
-      _rateLimitedUntil = DateTime.now().add(const Duration(seconds: 15));
+      _rateLimitedUntil = DateTime.now().add(const Duration(seconds: 20));
       if (body != null && (body.contains('RESOURCE_EXHAUSTED') || body.contains('Quota exceeded'))) {
         lastErrorMessage = 'RESOURCE_EXHAUSTED';
       }
@@ -73,9 +73,9 @@ class FirestoreDal {
   Future<List<Map<String, dynamic>>> getCollection(String collection) async {
     final now = DateTime.now();
 
-    // Serve from cache if requested recently (within 4 seconds)
+    // Serve from cache if requested recently (within 8 seconds)
     final lastTime = _cacheTime[collection];
-    if (lastTime != null && now.difference(lastTime).inSeconds < 4) {
+    if (lastTime != null && now.difference(lastTime).inSeconds < 8) {
       final cached = _collectionCache[collection];
       if (cached != null) return List.from(cached);
     }

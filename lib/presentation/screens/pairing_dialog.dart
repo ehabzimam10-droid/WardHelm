@@ -92,7 +92,7 @@ class _PairingDialogState extends State<PairingDialog> {
                 loc.pairingModalDesc,
                 style: TextStyle(
                   fontSize: 13,
-                  color: isDark ? AppColors.darkTextMuted : AppColors.lightTextMuted,
+                  color: isDark ? AppColors.darkTextMuted : AppColors.lightTextSecondary,
                 ),
               ),
               const SizedBox(height: 16),

@@ -8,6 +8,7 @@ class AgentGuiServer {
   final int port;
   HttpServer? _server;
   bool _isWindowOpen = false;
+  bool get isWindowOpen => _isWindowOpen;
 
   String currentCode = '';
   int remainingSeconds = 60;
@@ -111,23 +112,27 @@ class AgentGuiServer {
   }
 
   void launchWindow() {
-    if (_isWindowOpen) {
-      // Bring existing window to front via PowerShell
-      try {
-        Process.runSync('powershell.exe', [
-          '-NoProfile',
-          '-Command',
-          r'''
-          $w = (Get-Process | Where-Object { $_.MainWindowTitle -like "*WardHelm*" } | Select-Object -First 1)
-          if ($w) {
-            $ws = New-Object -ComObject WScript.Shell
-            $ws.AppActivate($w.Id)
-          }
-          '''
-        ]);
+    try {
+      final checkResult = Process.runSync('powershell.exe', [
+        '-NoProfile',
+        '-Command',
+        r'''
+        $w = (Get-Process | Where-Object { $_.MainWindowTitle -like "*WardHelm*" } | Select-Object -First 1)
+        if ($w) {
+          $ws = New-Object -ComObject WScript.Shell
+          $ws.AppActivate($w.Id)
+          Write-Host "FOUND"
+        }
+        '''
+      ]);
+      if (checkResult.stdout.toString().contains('FOUND')) {
+        _isWindowOpen = true;
+        stdout.writeln('[GUI] Restored existing WardHelm window.');
         return;
-      } catch (_) {}
-    }
+      }
+    } catch (_) {}
+
+    _isWindowOpen = false;
 
     final edgePaths = [
       r'C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe',
@@ -145,8 +150,11 @@ class AgentGuiServer {
               '--app=http://127.0.0.1:$port',
               '--window-size=480,720',
               '--app-id=wardhelm_agent_ui',
+              '--no-first-run',
+              '--no-default-browser-check',
               '--disable-extensions',
               '--disable-plugins',
+              '--disable-features=Translate,OptimizationHints,MediaRouter',
             ],
             mode: ProcessStartMode.detached,
           );

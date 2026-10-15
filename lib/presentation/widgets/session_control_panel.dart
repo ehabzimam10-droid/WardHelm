@@ -23,6 +23,8 @@ class SessionControlPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isRtl = Directionality.of(context) == TextDirection.rtl;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -34,8 +36,12 @@ class SessionControlPanel extends StatelessWidget {
                 icon: session.isPrayerPause
                     ? Icons.play_arrow_rounded
                     : Icons.pause_circle_filled_rounded,
-                title: session.isPrayerPause ? 'استئناف اللعب' : 'استراحة الصلاة',
-                subtitle: session.isPrayerPause ? 'فك قفل الشاشة' : 'قفل مؤقت للشاشة',
+                title: session.isPrayerPause
+                    ? (isRtl ? 'استئناف اللعب' : 'Resume Session')
+                    : (isRtl ? 'استراحة الصلاة' : 'Prayer Pause'),
+                subtitle: session.isPrayerPause
+                    ? (isRtl ? 'فك قفل الشاشة' : 'Unlock Screen')
+                    : (isRtl ? 'قفل مؤقت للشاشة' : 'Temporary Screen Lock'),
                 color: session.isPrayerPause ? AppColors.success : AppColors.warning,
                 onTap: onPrayerToggle,
               ),
@@ -46,8 +52,12 @@ class SessionControlPanel extends StatelessWidget {
                 icon: session.isInternetBlocked
                     ? Icons.wifi_rounded
                     : Icons.wifi_off_rounded,
-                title: session.isInternetBlocked ? 'إعادة الإنترنت' : 'قطع النت اللحظي',
-                subtitle: session.isInternetBlocked ? 'استعادة الاتصال' : 'زر طوارئ فوري',
+                title: session.isInternetBlocked
+                    ? (isRtl ? 'إعادة الإنترنت' : 'Restore Internet')
+                    : (isRtl ? 'قطع النت اللحظي' : 'Kill Internet'),
+                subtitle: session.isInternetBlocked
+                    ? (isRtl ? 'استعادة الاتصال' : 'Restore Connection')
+                    : (isRtl ? 'زر طوارئ فوري' : 'Instant Emergency Cut'),
                 color: session.isInternetBlocked ? AppColors.info : AppColors.danger,
                 onTap: onKillswitchToggle,
               ),
@@ -63,7 +73,7 @@ class SessionControlPanel extends StatelessWidget {
               child: OutlinedButton.icon(
                 onPressed: onExtend15,
                 icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
-                label: const Text('+15 دقيقة إضافية'),
+                label: Text(isRtl ? '+15 دقيقة إضافية' : '+15 Min Extra'),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   side: const BorderSide(color: AppColors.primary, width: 1.5),
@@ -76,7 +86,7 @@ class SessionControlPanel extends StatelessWidget {
               child: OutlinedButton.icon(
                 onPressed: onExtend30,
                 icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
-                label: const Text('+30 دقيقة إضافية'),
+                label: Text(isRtl ? '+30 دقيقة إضافية' : '+30 Min Extra'),
                 style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 14),
                   side: const BorderSide(color: AppColors.primary, width: 1.5),
@@ -92,7 +102,9 @@ class SessionControlPanel extends StatelessWidget {
         ElevatedButton.icon(
           onPressed: onEndSession,
           icon: const Icon(Icons.stop_circle_rounded, size: 20),
-          label: const Text('إنهاء الجلسة واستعادة وضع المالك الحر'),
+          label: Text(
+            isRtl ? 'إنهاء الجلسة واستعادة وضع المالك الحر' : 'End Session & Unlock PC Now',
+          ),
           style: ElevatedButton.styleFrom(
             backgroundColor: AppColors.danger,
             foregroundColor: Colors.white,
@@ -122,6 +134,8 @@ class _ActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(14),
@@ -148,9 +162,9 @@ class _ActionButton extends StatelessWidget {
             const SizedBox(height: 2),
             Text(
               subtitle,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 11,
-                color: AppColors.darkTextMuted,
+                color: isDark ? AppColors.darkTextMuted : AppColors.lightTextSecondary,
               ),
             ),
           ],

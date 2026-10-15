@@ -39,32 +39,41 @@ void _hideConsoleWindow() {
   } catch (_) {}
 }
 
-/// Converts a Dart string to a UTF-16LE Base64 string for PowerShell's -EncodedCommand
-String _encodePowerShellCommand(String script) {
-  final utf16Units = <int>[];
-  for (final codeUnit in script.codeUnits) {
-    utf16Units.add(codeUnit & 0xFF);
-    utf16Units.add((codeUnit >> 8) & 0xFF);
-  }
-  return base64Encode(utf16Units);
-}
-
-/// Spawns native Windows System Tray helper entirely in memory via PowerShell -EncodedCommand
+/// Spawns native Windows System Tray helper via persistent wardhelm_tray.ps1 script
 Future<void> _startSystemTrayIcon() async {
   if (!Platform.isWindows) return;
   try {
+    final localAppData = Platform.environment['LOCALAPPDATA'] ?? r'C:\Users\Public';
+    final installDir = Directory('$localAppData\\WardHelm');
+    if (!installDir.existsSync()) {
+      installDir.createSync(recursive: true);
+    }
+    final ps1File = File('${installDir.path}\\wardhelm_tray.ps1');
+    final icoFile = File('${installDir.path}\\wardhelm_logo.ico');
+    final pngFile = File('${installDir.path}\\wardhelm_logo.png');
+
     final agentPid = pid;
     final script = '''
+param([int]\$TargetPid = $agentPid)
+
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
 \$notify = New-Object System.Windows.Forms.NotifyIcon
 \$notify.Text = 'WardHelm PC Guardian'
 
-\$iconPath = Join-Path \$env:LOCALAPPDATA 'WardHelm\\wardhelm_logo.png'
-if (Test-Path \$iconPath) {
+\$icoPath = '${icoFile.path.replaceAll("'", "''")}'
+\$pngPath = '${pngFile.path.replaceAll("'", "''")}'
+
+if (Test-Path \$icoPath) {
   try {
-    \$bmp = New-Object System.Drawing.Bitmap(\$iconPath)
+    \$notify.Icon = New-Object System.Drawing.Icon(\$icoPath)
+  } catch {
+    \$notify.Icon = [System.Drawing.SystemIcons]::Shield
+  }
+} elseif (Test-Path \$pngPath) {
+  try {
+    \$bmp = New-Object System.Drawing.Bitmap(\$pngPath)
     \$hIcon = \$bmp.GetHicon()
     \$notify.Icon = [System.Drawing.Icon]::FromHandle(\$hIcon)
   } catch {
@@ -124,9 +133,9 @@ if (Test-Path \$iconPath) {
 
 # Liveness check: Close tray if Agent process terminates
 \$timer = New-Object System.Windows.Forms.Timer
-\$timer.Interval = 3000
+\$timer.Interval = 2500
 \$timer.add_Tick({
-  \$p = Get-Process -Id $agentPid -ErrorAction SilentlyContinue
+  \$p = Get-Process -Id \$TargetPid -ErrorAction SilentlyContinue
   if (-not \$p) {
     \$notify.Visible = \$false
     \$notify.Dispose()
@@ -138,9 +147,9 @@ if (Test-Path \$iconPath) {
 [System.Windows.Forms.Application]::Run()
 ''';
 
-    final encoded = _encodePowerShellCommand(script);
+    ps1File.writeAsStringSync(script, encoding: utf8);
 
-    await Process.start(
+    final proc = await Process.start(
       'powershell.exe',
       [
         '-NoProfile',
@@ -149,11 +158,16 @@ if (Test-Path \$iconPath) {
         'Hidden',
         '-ExecutionPolicy',
         'Bypass',
-        '-EncodedCommand',
-        encoded,
+        '-File',
+        ps1File.path,
+        '-TargetPid',
+        '$agentPid',
       ],
-      mode: ProcessStartMode.detached,
+      mode: ProcessStartMode.normal,
     );
+
+    proc.stdout.drain().catchError((_) {});
+    proc.stderr.drain().catchError((_) {});
   } catch (e) {
     stderr.writeln('[TRAY] Failed to start system tray helper: $e');
   }
@@ -169,12 +183,38 @@ Future<void> _ensureSelfInstalled() async {
       installDir.createSync(recursive: true);
     }
     final permanentExe = File('${installDir.path}\\wardhelm_agent.exe');
-    final icoFile = File('${installDir.path}\\wardhelm_logo.png');
+    final pngFile = File('${installDir.path}\\wardhelm_logo.png');
+    final icoFile = File('${installDir.path}\\wardhelm_logo.ico');
 
-    // Extract icon file if missing or empty
+    // Extract PNG icon file if missing or empty
+    if (!pngFile.existsSync() || pngFile.lengthSync() == 0) {
+      try {
+        pngFile.writeAsBytesSync(base64Decode(AppLogoData.logoPngBase64));
+      } catch (_) {}
+    }
+
+    // Generate real Windows .ICO file for shortcuts and System Tray if missing
     if (!icoFile.existsSync() || icoFile.lengthSync() == 0) {
       try {
-        icoFile.writeAsBytesSync(base64Decode(AppLogoData.logoPngBase64));
+        Process.runSync('powershell.exe', [
+          '-NoProfile',
+          '-Command',
+          '''
+          Add-Type -AssemblyName System.Drawing
+          \$png = "${pngFile.path}"
+          \$ico = "${icoFile.path}"
+          if (Test-Path \$png) {
+            \$b = New-Object System.Drawing.Bitmap(\$png)
+            \$h = \$b.GetHicon()
+            \$i = [System.Drawing.Icon]::FromHandle(\$h)
+            \$fs = New-Object System.IO.FileStream(\$ico, [System.IO.FileMode]::Create)
+            \$i.Save(\$fs)
+            \$fs.Close()
+            \$i.Dispose()
+            \$b.Dispose()
+          }
+          '''
+        ]);
       } catch (_) {}
     }
 

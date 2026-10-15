@@ -136,6 +136,7 @@ class DashboardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final loc = appState.loc;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final devices = deviceState.devices;
     final onlineCount = devices.where((d) => d.isActivelyOnline).length;
     final controlledCount = devices.where((d) => d.isControlledMode).length;
@@ -226,36 +227,75 @@ class DashboardScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Summary Fleet Metrics
-              Row(
-                children: [
-                  Expanded(
-                    child: _MetricCard(
-                      label: loc.totalDevices,
-                      value: '${devices.length}',
-                      icon: Icons.devices_rounded,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _MetricCard(
-                      label: loc.onlineNow,
-                      value: '$onlineCount',
-                      icon: Icons.wifi_rounded,
-                      color: AppColors.success,
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: _MetricCard(
-                      label: loc.controlledSessions,
-                      value: '$controlledCount',
-                      icon: Icons.lock_clock_rounded,
-                      color: AppColors.warning,
-                    ),
-                  ),
-                ],
+              // Summary Fleet Metrics (Adaptive Layout for Mobile & Desktop)
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isNarrow = constraints.maxWidth < 440;
+                  if (isNarrow) {
+                    return Column(
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _MetricCard(
+                                label: loc.totalDevices,
+                                value: '${devices.length}',
+                                icon: Icons.devices_rounded,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _MetricCard(
+                                label: loc.onlineNow,
+                                value: '$onlineCount',
+                                icon: Icons.wifi_rounded,
+                                color: AppColors.success,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 10),
+                        _MetricCard(
+                          label: loc.controlledSessions,
+                          value: '$controlledCount',
+                          icon: Icons.lock_clock_rounded,
+                          color: AppColors.warning,
+                        ),
+                      ],
+                    );
+                  }
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: _MetricCard(
+                          label: loc.totalDevices,
+                          value: '${devices.length}',
+                          icon: Icons.devices_rounded,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _MetricCard(
+                          label: loc.onlineNow,
+                          value: '$onlineCount',
+                          icon: Icons.wifi_rounded,
+                          color: AppColors.success,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: _MetricCard(
+                          label: loc.controlledSessions,
+                          value: '$controlledCount',
+                          icon: Icons.lock_clock_rounded,
+                          color: AppColors.warning,
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 24),
 
@@ -294,7 +334,7 @@ class DashboardScreen extends StatelessWidget {
                         Icon(
                           Icons.laptop_chromebook_rounded,
                           size: 56,
-                          color: AppColors.darkTextMuted.withOpacity(0.5),
+                          color: (isDark ? AppColors.darkTextMuted : AppColors.lightTextSecondary).withOpacity(0.5),
                         ),
                         const SizedBox(height: 16),
                         Text(
@@ -305,7 +345,10 @@ class DashboardScreen extends StatelessWidget {
                         Text(
                           loc.noDevicesDesc,
                           textAlign: TextAlign.center,
-                          style: const TextStyle(fontSize: 13, color: AppColors.darkTextMuted),
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isDark ? AppColors.darkTextMuted : AppColors.lightTextSecondary,
+                          ),
                         ),
                         const SizedBox(height: 20),
                         ElevatedButton.icon(
