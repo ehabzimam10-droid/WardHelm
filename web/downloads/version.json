@@ -1,5 +1,5 @@
 {
-  "version": "1.0.9",
-  "downloadUrl": "https://github.com/ehabzimam10-droid/WardHelm/releases/download/v1.0.9/wardhelm_agent.exe",
-  "releaseNotes": "v1.0.9: تحديث شامل ومستقر لوكيل ويندوز. تشغيل أيقونة علبة النظام بجانب الساعة مع الشعار الرسمي .ico، دعم استعادة نافذة التطبيق فورا عند إغلاقها، نافذة مكتبية بدون تنبيهات متصفح، تحسين التباين في الوضعين الليلي والنهاري، ودعم متكامل للترجمة الإنجليزية وتقليل استهلاك الكوتا السحابية."
+  "version": "1.0.10",
+  "downloadUrl": "https://github.com/ehabzimam10-droid/WardHelm/releases/download/v1.0.10/wardhelm_agent.exe",
+  "releaseNotes": "v1.0.10: ترقية شاملة لمحرك ويندوز. تشغيل محرك علبة النظام النيتف عبر wardhelm_tray.exe المستقل، إطلاق نافذة التطبيق ببروفايل معزول، ودعم التحديث الفوري."
 }
