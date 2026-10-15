@@ -39,156 +39,36 @@ void _hideConsoleWindow() {
   } catch (_) {}
 }
 
-/// Spawns native Windows System Tray helper via persistent wardhelm_tray.ps1 script
+/// Spawns native Windows System Tray helper via compiled wardhelm_tray.exe binary
 Future<void> _startSystemTrayIcon() async {
   if (!Platform.isWindows) return;
   try {
     final localAppData = Platform.environment['LOCALAPPDATA'] ?? r'C:\Users\Public';
     final installDir = Directory('$localAppData\\WardHelm');
-    if (!installDir.existsSync()) {
-      installDir.createSync(recursive: true);
+    final trayExe = File('${installDir.path}\\wardhelm_tray.exe');
+
+    if (!trayExe.existsSync()) {
+      final localTrayExe = File('build\\wardhelm_tray.exe');
+      if (localTrayExe.existsSync()) {
+        localTrayExe.copySync(trayExe.path);
+      }
     }
-    final ps1File = File('${installDir.path}\\wardhelm_tray.ps1');
-    final ico32File = File('${installDir.path}\\wardhelm_logo_32.ico');
-    final ico16File = File('${installDir.path}\\wardhelm_logo_16.ico');
-    final pngFile = File('${installDir.path}\\wardhelm_logo.png');
+
+    if (!trayExe.existsSync()) {
+      stderr.writeln('[TRAY] wardhelm_tray.exe not found at ${trayExe.path}');
+      return;
+    }
 
     final agentPid = pid;
-    final script = '''
-param([int]\$TargetPid = $agentPid)
-
-Add-Type -AssemblyName System.Windows.Forms
-Add-Type -AssemblyName System.Drawing
-
-\$notify = New-Object System.Windows.Forms.NotifyIcon
-\$notify.Text = 'WardHelm PC Guardian'
-
-\$ico32Path = '${ico32File.path.replaceAll("'", "''")}'
-\$ico16Path = '${ico16File.path.replaceAll("'", "''")}'
-\$pngPath = '${pngFile.path.replaceAll("'", "''")}'
-
-if (Test-Path \$ico32Path) {
-  try {
-    \$notify.Icon = New-Object System.Drawing.Icon(\$ico32Path)
-  } catch {
-    \$notify.Icon = [System.Drawing.SystemIcons]::Shield
-  }
-} elseif (Test-Path \$ico16Path) {
-  try {
-    \$notify.Icon = New-Object System.Drawing.Icon(\$ico16Path)
-  } catch {
-    \$notify.Icon = [System.Drawing.SystemIcons]::Shield
-  }
-} elseif (Test-Path \$pngPath) {
-  try {
-    \$src = New-Object System.Drawing.Bitmap(\$pngPath)
-    \$small = New-Object System.Drawing.Bitmap(32, 32)
-    \$g = [System.Drawing.Graphics]::FromImage(\$small)
-    \$g.DrawImage(\$src, 0, 0, 32, 32)
-    \$g.Dispose()
-    \$h = \$small.GetHicon()
-    \$notify.Icon = [System.Drawing.Icon]::FromHandle(\$h)
-    \$small.Dispose()
-    \$src.Dispose()
-  } catch {
-    \$notify.Icon = [System.Drawing.SystemIcons]::Shield
-  }
-} else {
-  \$notify.Icon = [System.Drawing.SystemIcons]::Shield
-}
-
-\$contextMenu = New-Object System.Windows.Forms.ContextMenu
-
-\$openItem = New-Object System.Windows.Forms.MenuItem('🛡️ فتح لوحة التحكم (Dashboard)')
-\$openItem.add_Click({
-  try {
-    Invoke-RestMethod -Uri 'http://127.0.0.1:48123/open_gui' -Method Post -TimeoutSec 2 | Out-Null
-  } catch {}
-})
-
-\$updateItem = New-Object System.Windows.Forms.MenuItem('🔄 فحص التحديثات الآن (Check Updates)')
-\$updateItem.add_Click({
-  try {
-    Invoke-RestMethod -Uri 'http://127.0.0.1:48123/check_update' -Method Post -TimeoutSec 2 | Out-Null
-  } catch {}
-})
-
-\$statusItem = New-Object System.Windows.Forms.MenuItem('🟢 الحماية نشطة في الخلفية (Active)')
-\$statusItem.Enabled = \$false
-
-\$separator = New-Object System.Windows.Forms.MenuItem('-')
-
-\$exitItem = New-Object System.Windows.Forms.MenuItem('❌ إغلاق الحارس تماماً (Exit)')
-\$exitItem.add_Click({
-  try {
-    Invoke-RestMethod -Uri 'http://127.0.0.1:48123/exit' -Method Post -TimeoutSec 2 | Out-Null
-  } catch {}
-  \$notify.Visible = \$false
-  \$notify.Dispose()
-  [System.Windows.Forms.Application]::Exit()
-})
-
-\$contextMenu.MenuItems.Add(\$openItem) | Out-Null
-\$contextMenu.MenuItems.Add(\$updateItem) | Out-Null
-\$contextMenu.MenuItems.Add(\$statusItem) | Out-Null
-\$contextMenu.MenuItems.Add(\$separator) | Out-Null
-\$contextMenu.MenuItems.Add(\$exitItem) | Out-Null
-
-\$notify.ContextMenu = \$contextMenu
-
-\$notify.add_DoubleClick({ \$openItem.PerformClick() })
-\$notify.add_Click({
-  if ([System.Windows.Forms.Control]::MouseButtons -eq [System.Windows.Forms.MouseButtons]::Left) {
-    \$openItem.PerformClick()
-  }
-})
-
-\$notify.Visible = \$true
-
-try {
-  \$notify.BalloonTipTitle = 'WardHelm PC Guardian'
-  \$notify.BalloonTipText = 'درع الحماية نشط ويعمل في علبة النظام (بجانب الساعة).'
-  \$notify.BalloonTipIcon = [System.Windows.Forms.ToolTipIcon]::Info
-  \$notify.ShowBalloonTip(3000)
-} catch {}
-
-# Liveness check: Close tray if Agent process terminates
-\$timer = New-Object System.Windows.Forms.Timer
-\$timer.Interval = 2500
-\$timer.add_Tick({
-  \$p = Get-Process -Id \$TargetPid -ErrorAction SilentlyContinue
-  if (-not \$p) {
-    \$notify.Visible = \$false
-    \$notify.Dispose()
-    [System.Windows.Forms.Application]::Exit()
-  }
-})
-\$timer.Start()
-
-[System.Windows.Forms.Application]::Run()
-''';
-
-    ps1File.writeAsStringSync(script, encoding: utf8);
-
     final proc = await Process.start(
-      'powershell.exe',
-      [
-        '-NoProfile',
-        '-STA',
-        '-WindowStyle',
-        'Hidden',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
-        ps1File.path,
-        '-TargetPid',
-        '$agentPid',
-      ],
+      trayExe.path,
+      ['$agentPid'],
       mode: ProcessStartMode.normal,
     );
 
     proc.stdout.drain().catchError((_) {});
     proc.stderr.drain().catchError((_) {});
+    stdout.writeln('[TRAY] Native tray helper started (PID: ${proc.pid}).');
   } catch (e) {
     stderr.writeln('[TRAY] Failed to start system tray helper: $e');
   }
@@ -285,6 +165,16 @@ Future<void> _ensureSelfInstalled() async {
       try {
         currentExe.copySync(permanentExe.path);
       } catch (_) {}
+    }
+
+    final trayExe = File('${installDir.path}\\wardhelm_tray.exe');
+    if (!trayExe.existsSync()) {
+      final localTrayExe = File('build\\wardhelm_tray.exe');
+      if (localTrayExe.existsSync()) {
+        try {
+          localTrayExe.copySync(trayExe.path);
+        } catch (_) {}
+      }
     }
 
     final targetPath = permanentExe.existsSync() ? permanentExe.path : currentExe.path;

@@ -141,6 +141,9 @@ class AgentGuiServer {
       r'C:\Program Files (x86)\Google\Chrome\Application\chrome.exe',
     ];
 
+    final localAppData = Platform.environment['LOCALAPPDATA'] ?? r'C:\Users\Public';
+    final profileDir = '$localAppData\\WardHelm\\gui_profile';
+
     for (final path in edgePaths) {
       if (File(path).existsSync()) {
         try {
@@ -148,6 +151,7 @@ class AgentGuiServer {
             path,
             [
               '--app=http://127.0.0.1:$port',
+              '--user-data-dir=$profileDir',
               '--window-size=480,720',
               '--app-id=wardhelm_agent_ui',
               '--no-first-run',
